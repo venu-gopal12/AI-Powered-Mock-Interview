@@ -9,6 +9,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const Dashboard = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,7 +20,7 @@ const Dashboard = () => {
     const fetchAnalytics = async () => {
       try {
         setLoading(true);
-        const res = await axios.get('http://localhost:5000/analytics');
+        const res = await axios.get(`${API_URL}/analytics`);
         
         // Format the date so it looks nice on the chart's X-axis
         const formattedData = res.data.map((item, index) => ({

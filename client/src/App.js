@@ -4,6 +4,8 @@ import Interview from './Interview';
 import Dashboard from './Dashboard'; 
 import './App.css';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 function App() {
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState('NEW'); // 'NEW', 'DASHBOARD', or a mongo _id
@@ -15,7 +17,7 @@ function App() {
 
   const fetchSidebar = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/sessions');
+      const res = await axios.get(`${API_URL}/sessions`);
       setSessions(res.data);
     } catch (error) {
       console.error("Sidebar fetch failed", error);
@@ -25,7 +27,7 @@ function App() {
   const loadPastSession = async (id) => {
     setActiveSessionId(id);
     try {
-      const res = await axios.get(`http://localhost:5000/sessions/${id}`);
+      const res = await axios.get(`${API_URL}/sessions/${id}`);
       setViewingPastChat(res.data);
     } catch (error) {
       console.error("Failed to load chat history");
