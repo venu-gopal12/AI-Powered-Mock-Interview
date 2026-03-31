@@ -272,10 +272,35 @@ const Interview = ({ onInterviewEnd }) => {
           <div className="messages-list">
             <div className="messages-center">
             {messages.length === 0 && (
-              <div className="empty-state">
-                <div className="empty-state-icon"><SparklesIcon /></div>
-                <h2>AI Mock Interviewer</h2>
-                <p>Upload your resume to get started, or simply say hello to begin the interview.</p>
+              <div className="empty-state-container">
+                <div className="empty-state-header">
+                  <div className="empty-state-icon"><SparklesIcon /></div>
+                  <h2>AI Mock Interviewer</h2>
+                  <p>Welcome! Upload your resume to get started, or simply say hello. This platform simulates a real technical interview environment.</p>
+                </div>
+                
+                <div className="feature-grid">
+                  <div className="feature-card">
+                    <div className="feature-icon">🤖</div>
+                    <h3>Multi-Agent Personas</h3>
+                    <p>Experience dynamic routing between a strict Tech Lead evaluating code and a supportive HR manager assessing culture fit.</p>
+                  </div>
+                  <div className="feature-card">
+                    <div className="feature-icon">📄</div>
+                    <h3>RAG Resume Parsing</h3>
+                    <p>Upload your PDF to extract context. The AI will ask highly targeted, project-specific questions tailored to your background.</p>
+                  </div>
+                  <div className="feature-card">
+                    <div className="feature-icon">💻</div>
+                    <h3>Live Code Sandbox</h3>
+                    <p>Write, execute, and submit code dynamically in multiple languages via our integrated Monaco Editor workspace.</p>
+                  </div>
+                  <div className="feature-card">
+                    <div className="feature-icon">🎤</div>
+                    <h3>Real-Time Voice-to-Voice</h3>
+                    <p>Transcribe your speech to answer questions verbally and listen to the AI respond synchronously, just like a phone screen.</p>
+                  </div>
+                </div>
               </div>
             )}
 

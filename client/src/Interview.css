@@ -473,33 +473,97 @@ body {
   opacity: 0.9;
 }
 
-.empty-state {
+.empty-state-container {
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  height: 100%;
-  opacity: 0.8;
+  align-items: center;
+  padding: 4rem 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.empty-state-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.empty-state-header h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.empty-state-header p {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1.6;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .empty-state-icon {
   width: 48px;
   height: 48px;
-  margin-bottom: 1rem;
-  color: var(--text-secondary);
+  margin: 0 auto 1.5rem auto;
+  color: var(--text-primary);
+  background: var(--input-bg);
+  padding: 0.75rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
 }
 
-.empty-state h2 {
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.feature-card {
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  padding: 1.5rem;
+  border-radius: 1rem;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(16, 163, 127, 0.5);
+}
+
+.feature-icon {
   font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.feature-card h3 {
+  font-size: 1.1rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
+  color: var(--text-primary);
 }
 
-.empty-state p {
+.feature-card p {
   color: var(--text-secondary);
-  max-width: 400px;
-  text-align: center;
+  font-size: 0.9rem;
   line-height: 1.5;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .messages-list::-webkit-scrollbar {
