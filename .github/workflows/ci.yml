@@ -1,0 +1,44 @@
+name: Build and Test
+
+# Trigger this workflow on every push to the main branch
+# and on every Pull Request targeting the main branch.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  verify-build:
+    name: Verify Backend and Frontend Build
+    runs-on: ubuntu-latest
+    
+    # Run these steps in order on the cloud runner
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # LTS version recommended for modern React/Express apps
+          cache: 'npm'
+
+      - name: Install Backend Dependencies
+        run: npm ci || npm install
+        
+      - name: Install Frontend Dependencies
+        working-directory: ./client
+        run: npm ci || npm install
+
+      - name: Build Frontend Application
+        working-directory: ./client
+        run: npm run build
+        env:
+          # Vercel treats warnings as errors and fails the build on CI=true. 
+          # Setting CI=false ensures that standard React warnings won't instantly halt 
+          # your build process locally on GitHub actions, matching the flexibility of dev.
+          # Alternatively, leave it as true if you want incredibly strict linting (which broke it earlier).
+          NO_COLOR: 1 # optional: just keeps the build output clean
