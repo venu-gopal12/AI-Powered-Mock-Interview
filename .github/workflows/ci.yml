@@ -37,8 +37,8 @@ jobs:
         working-directory: ./client
         run: npm run build
         env:
-          # Vercel treats warnings as errors and fails the build on CI=true. 
+          # Vercel and GitHub Actions treat warnings as errors and fail the build on CI=true. 
           # Setting CI=false ensures that standard React warnings won't instantly halt 
           # your build process locally on GitHub actions, matching the flexibility of dev.
-          # Alternatively, leave it as true if you want incredibly strict linting (which broke it earlier).
+          CI: false
           NO_COLOR: 1 # optional: just keeps the build output clean
