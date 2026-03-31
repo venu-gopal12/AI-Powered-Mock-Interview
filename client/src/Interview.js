@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Joyride, STATUS } from 'react-joyride';
 import './Interview.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -32,6 +33,39 @@ const Interview = ({ onInterviewEnd }) => {
   const [language, setLanguage] = useState("javascript"); 
   const [scorecard, setScorecard] = useState(null); 
   const textareaRef = useRef(null);
+
+  const [runTour, setRunTour] = useState(() => {
+    return !localStorage.getItem('interviewTourCompleted');
+  });
+
+  const tourSteps = [
+    {
+      target: '.tour-resume-step',
+      content: 'Start by uploading your resume. The AI will parse it and tailor the interview specifically to your experience.',
+      disableBeacon: true,
+    },
+    {
+      target: '.tour-chat-step',
+      content: 'Type your answers here, or use the microphone to speak naturally to the AI.',
+    },
+    {
+      target: '.tour-code-step',
+      content: 'You can write, test, and submit real code here for technical questions.',
+    },
+    {
+      target: '.tour-end-step',
+      content: "When you're finished, click here to end the interview and receive your detailed scorecard!",
+    }
+  ];
+
+  const handleJoyrideCallback = (data) => {
+    const { status } = data;
+    const finishedStatuses = [STATUS.FINISHED, STATUS.SKIPPED];
+    if (finishedStatuses.includes(status)) {
+      localStorage.setItem('interviewTourCompleted', 'true');
+      setRunTour(false);
+    }
+  };
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -250,17 +284,31 @@ const Interview = ({ onInterviewEnd }) => {
 
   return (
     <div className={`app-container ${currentAgent === 'TECH_LEAD' ? 'theme-tech' : 'theme-hr'}`}>
+      <Joyride
+        callback={handleJoyrideCallback}
+        continuous={true}
+        run={runTour}
+        showProgress={true}
+        showSkipButton={true}
+        steps={tourSteps}
+        styles={{
+          options: {
+            primaryColor: '#10a37f',
+            zIndex: 10000,
+          }
+        }}
+      />
       <header className="app-header">
         <div className="logo-area">
           <SparklesIcon />
           <span>Interview Agent</span>
         </div>
         <div className="header-actions">
-           <label className="btn-secondary">
+           <label className="btn-secondary tour-resume-step">
              <UploadIcon /> Resume
              <input type="file" accept=".pdf" hidden onChange={handleFileUpload} />
            </label>
-           <button onClick={endInterview} className="btn-secondary btn-danger" title="End & Grade">
+           <button onClick={endInterview} className="btn-secondary btn-danger tour-end-step" title="End & Grade">
              <StopIcon /> End
            </button>
         </div>
@@ -369,7 +417,7 @@ const Interview = ({ onInterviewEnd }) => {
 
         <div className="input-container">
           <div className="input-center">
-             <form className="input-box" onSubmit={handleTextSubmit}>
+             <form className="input-box tour-chat-step" onSubmit={handleTextSubmit}>
                <div className="left-controls">
                  <button 
                    type="button" 
@@ -431,7 +479,7 @@ const Interview = ({ onInterviewEnd }) => {
         </main>
 
         {/* RIGHT PANEL: Live Code Editor */}
-        <div className="editor-panel">
+        <div className="editor-panel tour-code-step">
           <div className="editor-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3>Code Sandbox</h3>
             <select 
