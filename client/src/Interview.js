@@ -78,6 +78,7 @@ const Interview = ({ onInterviewEnd }) => {
       if (recognitionRef.current) recognitionRef.current.stop();
       window.speechSynthesis.cancel();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -245,17 +246,7 @@ const Interview = ({ onInterviewEnd }) => {
     }
   };
 
-  const formatMessageText = (text) => {
-    return text.split('\n').map((line, i) => (
-      <span key={i}>
-        {line.split(/(\*\*.*?\*\*)/).map((part, j) => 
-          part.startsWith('**') && part.endsWith('**') ? 
-            <strong key={j}>{part.slice(2, -2)}</strong> : part
-        )}
-        <br />
-      </span>
-    ));
-  };
+
 
   return (
     <div className={`app-container ${currentAgent === 'TECH_LEAD' ? 'theme-tech' : 'theme-hr'}`}>
