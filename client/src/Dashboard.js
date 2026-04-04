@@ -81,7 +81,7 @@ const Dashboard = () => {
   return (
     <div className="dashboard-container" style={{ padding: '2rem', maxWidth: '1000px', margin: '0 auto', color: 'var(--text-primary)' }}>
       
-      <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem', paddingLeft: '48px' }}>
         <TrendingUp size={28} color="#10a37f" />
         <h1 style={{ fontSize: '1.8rem', fontWeight: '700', margin: 0 }}>Performance Analytics</h1>
       </div>

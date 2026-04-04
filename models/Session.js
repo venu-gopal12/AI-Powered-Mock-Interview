@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const sessionSchema = new mongoose.Schema({
+  sessionId: { type: String, required: true },
   title: { type: String, default: "Mock Interview" },
   messages: [{
     sender: String, 

@@ -43,29 +43,41 @@ const Interview = ({ onInterviewEnd }) => {
       target: '.tour-resume-step',
       content: 'Start by uploading your resume. The AI will parse it and tailor the interview specifically to your experience.',
       disableBeacon: true,
+      placement: 'bottom',
     },
     {
       target: '.tour-chat-step',
       content: 'Type your answers here, or use the microphone to speak naturally to the AI.',
+      placement: 'top',
     },
     {
       target: '.tour-code-step',
       content: 'You can write, test, and submit real code here for technical questions.',
+      placement: 'left',
     },
     {
       target: '.tour-end-step',
       content: "When you're finished, click here to end the interview and receive your detailed scorecard!",
+      placement: 'bottom-end',
     }
   ];
 
   const handleJoyrideCallback = (data) => {
-    const { status } = data;
+    const { status, action, type } = data;
     const finishedStatuses = [STATUS.FINISHED, STATUS.SKIPPED];
-    if (finishedStatuses.includes(status)) {
+    
+    if (finishedStatuses.includes(status) || action === 'close' || type === 'tour:end' || type === 'error') {
       localStorage.setItem('interviewTourCompleted', 'true');
       setRunTour(false);
     }
   };
+
+  useEffect(() => {
+    // As soon as the tour is launched once, immediately flag it so a page reload never shows it again
+    if (runTour) {
+      localStorage.setItem('interviewTourCompleted', 'true');
+    }
+  }, [runTour]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -290,6 +302,8 @@ const Interview = ({ onInterviewEnd }) => {
         run={runTour}
         showProgress={true}
         showSkipButton={true}
+        disableScrolling={true}
+        floaterProps={{ disableAnimation: true }}
         steps={tourSteps}
         styles={{
           options: {

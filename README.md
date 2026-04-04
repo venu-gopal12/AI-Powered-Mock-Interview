@@ -32,6 +32,16 @@ I built this platform to simulate high-pressure technical interviews. It uses a 
 3. **Database:** MongoDB Atlas (Mongoose ODM).
 4. **AI Layer:** LangChain.js orchestrating Groq API (Llama-3-70B) for ultra-low latency inference.
 
+## 🛠️ Skills & Technologies Demonstrated
+
+Building this complex application demonstrates proficiency across the modern full-stack ecosystem:
+* **Frontend Development:** React.js hooks/lifecycle, Responsive CSS Grid/Flexbox, UI/UX Design (complex empty states, interactive component onboarding using `react-joyride`).
+* **Backend Engineering:** Node.js, Express.js architecture, RESTful API endpoint design, and secure routing.
+* **Artificial Intelligence:** Orchestrating multi-agent LLMs via LangChain, utilizing Groq for high-speed inference, and Retrieval-Augmented Generation (RAG) for parsing/querying PDFs.
+* **Database Management:** MongoDB unstructured data handling, Mongoose ODM integration, and persistent chat state management.
+* **DevOps & Deployment:** Automated CI/CD pipeline creation with GitHub Actions, seamless cloud deployments on Vercel (Frontend) and Render (Backend).
+* **Native Web APIs:** Deep integration of the browser's Web Speech API for real-time Voice-to-Text and Text-to-Speech functionalities.
+
 ## 🚀 Run it Locally
 
 ### Prerequisites

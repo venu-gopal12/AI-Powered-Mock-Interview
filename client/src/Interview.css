@@ -110,6 +110,7 @@ body {
   gap: 0.5rem;
   font-weight: 600;
   font-size: 1.1rem;
+  margin-left: 48px;
 }
 
 .header-actions {
@@ -593,4 +594,34 @@ body {
 
 .text-content p {
   margin-top: 0;
+}
+
+@media (max-width: 768px) {
+  .workspace-container {
+    flex-direction: column;
+  }
+  .chat-main {
+    flex: none;
+    height: 55vh;
+  }
+  .editor-panel {
+    flex: none;
+    height: 45vh;
+  }
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .logo-area {
+    margin-left: 36px;
+  }
+  .input-textarea {
+    font-size: 16px; /* prevent iOS zoom */
+  }
 }

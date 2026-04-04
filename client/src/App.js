@@ -6,10 +6,15 @@ import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+// --- ANONYMOUS SESSION SETUP ---
+let sessionId = localStorage.getItem('interviewSessionId');
+// ... (I need to be careful with targeting index.js vs App.js lines. Wait, this target is `client/src/App.js`)
+
 function App() {
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState('NEW'); // 'NEW', 'DASHBOARD', or a mongo _id
   const [viewingPastChat, setViewingPastChat] = useState(null); 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Sidebar closed by default
 
   useEffect(() => {
     fetchSidebar();
@@ -49,7 +54,7 @@ function App() {
     <div className="app-layout">
       
       {/* LEFT SIDEBAR (ChatGPT Style) */}
-      <div className="sidebar">
+      <div className={`sidebar ${isSidebarOpen ? '' : 'closed'}`}>
         <button className="new-chat-btn" onClick={startNewInterview}>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           New Interview
@@ -82,14 +87,41 @@ function App() {
       </div>
 
       {/* RIGHT MAIN AREA */}
-      <div className="main-content">
+      <div className="main-content" style={{ position: 'relative' }}>
+        <button 
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          style={{
+            position: 'absolute',
+            top: '16px',
+            left: '16px',
+            zIndex: 100,
+            background: 'var(--bg-color)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '6px',
+            padding: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: 'var(--shadow-sm)',
+            color: 'var(--text-primary)',
+            transition: 'background 0.2s ease'
+          }}
+          title={isSidebarOpen ? "Close Sidebar" : "Open Sidebar"}
+        >
+          {isSidebarOpen ? (
+             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          ) : (
+             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          )}
+        </button>
         {activeSessionId === 'NEW' ? (
           <Interview onInterviewEnd={fetchSidebar} /> 
         ) : activeSessionId === 'DASHBOARD' ? (
           <Dashboard />
         ) : (
           <div className="past-chat-view">
-            <h2 style={{ padding: '1rem 2rem', borderBottom: '1px solid var(--border-color)', margin: 0 }}>
+            <h2 style={{ padding: '1rem 2rem 1rem 4rem', borderBottom: '1px solid var(--border-color)', margin: 0 }}>
               {viewingPastChat?.title} <span style={{fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 'normal'}}>(Read-Only)</span>
             </h2>
             <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
