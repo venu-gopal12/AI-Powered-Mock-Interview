@@ -6,9 +6,7 @@ import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-// --- ANONYMOUS SESSION SETUP ---
-let sessionId = localStorage.getItem('interviewSessionId');
-// ... (I need to be careful with targeting index.js vs App.js lines. Wait, this target is `client/src/App.js`)
+
 
 function App() {
   const [sessions, setSessions] = useState([]);
