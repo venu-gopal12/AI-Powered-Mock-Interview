@@ -18,11 +18,25 @@ const HelpIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height
 const SparklesIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>;
 
 const Interview = ({ onInterviewEnd }) => {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    const saved = localStorage.getItem('interviewMessages');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [resumeContext, setResumeContext] = useState(() => {
+    return localStorage.getItem('interviewResumeContext') || "";
+  });
   const [isListening, setIsListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [currentAgent, setCurrentAgent] = useState(null); 
+  const [currentAgent, setCurrentAgent] = useState(null);
+
+  useEffect(() => {
+    localStorage.setItem('interviewMessages', JSON.stringify(messages));
+  }, [messages]);
+
+  useEffect(() => {
+    localStorage.setItem('interviewResumeContext', resumeContext);
+  }, [resumeContext]); 
   
   const recognitionRef = useRef(null);
   const transcriptRef = useRef("");
@@ -178,11 +192,16 @@ const Interview = ({ onInterviewEnd }) => {
     if (window.speechSynthesis.speaking) stopSpeaking();
 
     const newMsg = { sender: 'user', text: text.trim() };
-    setMessages((prev) => [...prev, newMsg]);
+    const newHistory = [...messages, newMsg];
+    setMessages(newHistory);
     setIsTyping(true);
 
     try {
-      const res = await axios.post(`${API_URL}/interview`, { message: text });
+      const res = await axios.post(`${API_URL}/interview`, { 
+        message: text,
+        history: newHistory,
+        resumeContext: resumeContext 
+      });
       const { agent, response } = res.data;
       
       setCurrentAgent(agent);
@@ -236,7 +255,7 @@ const Interview = ({ onInterviewEnd }) => {
     if (isTyping) return;
     setIsTyping(true);
     try {
-      const res = await axios.post(`${API_URL}/hint`);
+      const res = await axios.post(`${API_URL}/hint`, { history: messages });
       const hintText = res.data.hint;
       setIsTyping(false);
       setMessages(prev => [...prev, { sender: 'HR_WHISPER', text: hintText }]);
@@ -257,9 +276,23 @@ const Interview = ({ onInterviewEnd }) => {
 
     if (window.confirm("End the interview and get your score?")) {
       try {
-        const res = await axios.post(`${API_URL}/end-interview`, { frontendMessages: messages });
-        setScorecard(res.data);
-        if (onInterviewEnd) onInterviewEnd(); // Add this to refresh sidebar
+        const res = await axios.post(`${API_URL}/end-interview`, { history: messages });
+        const { scorecard, title } = res.data;
+        setScorecard(scorecard);
+        
+        // Save to localStorage
+        const savedSessions = JSON.parse(localStorage.getItem('savedSessions') || '[]');
+        savedSessions.push({
+          _id: Date.now().toString(),
+          title: title || 'Mock Interview',
+          createdAt: new Date().toISOString(),
+          scorecard: scorecard,
+          messages: messages // Save complete history
+        });
+        localStorage.setItem('savedSessions', JSON.stringify(savedSessions));
+
+        // Let the user view the scorecard. When they close it, we'll clear the active state.
+        if (onInterviewEnd) onInterviewEnd(); 
       } catch (err) {
         console.error("Failed to end interview");
       }
@@ -277,13 +310,17 @@ const Interview = ({ onInterviewEnd }) => {
     setIsTyping(true);
 
     try {
-      await axios.post(`${API_URL}/upload-resume`, formData, {
+      const res = await axios.post(`${API_URL}/upload-resume`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      
+      const { resumeText } = res.data;
+      setResumeContext(resumeText); // Save to context!
 
       setIsTyping(false);
-      setMessages(prev => [...prev, { sender: 'TECH_LEAD', text: "I have your resume. Let's see if your skills match the paper. Introduce yourself." }]);
-      speak("I have your resume. Let's see if your skills match the paper. Introduce yourself.", "TECH_LEAD");
+      const startMsg = "I have your resume. Let's see if your skills match the paper. Introduce yourself.";
+      setMessages([{ sender: 'TECH_LEAD', text: startMsg }]); // Clear history and start
+      speak(startMsg, "TECH_LEAD");
       
     } catch (error) {
       setIsTyping(false);

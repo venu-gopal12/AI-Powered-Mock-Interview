@@ -17,13 +17,23 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
+    const fetchAnalytics = () => {
       try {
         setLoading(true);
-        const res = await axios.get(`${API_URL}/analytics`);
+        const saved = localStorage.getItem('savedSessions');
+        const pastSessions = saved ? JSON.parse(saved) : [];
+        
+        // Transform Session data to match what the chart expects
+        const historyData = pastSessions.map(s => ({
+           technical_score: s.scorecard?.technical_score || 0,
+           communication_score: s.scorecard?.communication_score || 0,
+           feedback: s.scorecard?.feedback || "",
+           improvement: s.scorecard?.improvement || "",
+           date: s.createdAt
+        }));
         
         // Format the date so it looks nice on the chart's X-axis
-        const formattedData = res.data.map((item, index) => ({
+        const formattedData = historyData.map((item, index) => ({
           ...item,
           name: `Attempt ${index + 1}`,
           Tech: item.technical_score,
@@ -35,7 +45,7 @@ const Dashboard = () => {
         setError(null);
       } catch (error) {
         console.error("Failed to load analytics", error);
-        setError("Unable to load performance data from the database.");
+        setError("Unable to load performance data from local storage.");
       } finally {
         setLoading(false);
       }

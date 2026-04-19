@@ -18,20 +18,28 @@ function App() {
     fetchSidebar();
   }, []);
 
-  const fetchSidebar = async () => {
+  const fetchSidebar = () => {
     try {
-      const res = await axios.get(`${API_URL}/sessions`);
-      setSessions(res.data);
+      const saved = localStorage.getItem('savedSessions');
+      if (saved) {
+        setSessions(JSON.parse(saved).reverse()); // Newest first
+      } else {
+        setSessions([]);
+      }
     } catch (error) {
       console.error("Sidebar fetch failed", error);
     }
   };
 
-  const loadPastSession = async (id) => {
+  const loadPastSession = (id) => {
     setActiveSessionId(id);
     try {
-      const res = await axios.get(`${API_URL}/sessions/${id}`);
-      setViewingPastChat(res.data);
+      const saved = localStorage.getItem('savedSessions');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const session = parsed.find(s => s._id === id);
+        setViewingPastChat(session || null);
+      }
     } catch (error) {
       console.error("Failed to load chat history");
     }
