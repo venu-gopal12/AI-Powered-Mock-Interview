@@ -1,165 +1,209 @@
 const { ChatGroq } = require("@langchain/groq");
-const { SystemMessage, HumanMessage } = require("@langchain/core/messages");
+const { SystemMessage, HumanMessage, AIMessage } = require("@langchain/core/messages");
 require("dotenv").config();
 
-// 1. Initialize the Free Model (Llama 3 8b is very fast)
 const model = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: "llama-3.3-70b-versatile", // Free and fast
+  model: "llama-3.3-70b-versatile",
   temperature: 0.6,
 });
 
-// 2. Define the Personalities
-const hrPrompt = `You are a Supportive HR Manager. 
-Focus on the candidate's confidence and communication. 
-If they seem stuck or nervous, offer encouragement and a helpful hint.`;
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-// 3. The Supervisor Function (Decides who speaks)
-async function runInterviewAgent(userInput, conversationHistory = [], resumeText = "") {
-  
-  // 1. DYNAMIC SYSTEM PROMPT: Check if we actually have a resume
-  let techLeadPrompt = "";
+// Rough token estimate: 1 token ≈ 4 chars. Keep last N chars of history
+// so we never silently blow past the context window.
+const MAX_HISTORY_CHARS = 12_000;
 
-  if (resumeText && resumeText.trim() !== "") {
-    // SCENARIO A: Resume was uploaded
-    techLeadPrompt = `
-      IDENTITY: You are a grumpy, skeptical Senior Engineer interviewing a NEW GRADUATE / JUNIOR Full-Stack Developer. You have the candidate's resume.
-      
-      CORE DIRECTIVES:
-      1. ONE QUESTION ONLY: Pick ONE specific item from the resume below and drill down.
-      2. DIFFICULTY CAP: Keep questions to fundamental concepts related to their experience.
-      3. NO SCENARIOS: DO NOT ask complex, multi-part hypothetical scenarios involving Botnets, race conditions, or massive scale. Keep it simple.
-      4. MOVE ON: If the candidate gives a good answer, DO NOT drill deeper into edge cases. Accept it, grumble about it, and ask a completely DIFFERENT question on a new topic from their resume.
-      5. Be Brief: Max 3 sentences. No lists.
-      6. Roast Weaknesses: If they list basic skills, mock them.
-      
-      RESUME CONTENT:
-      ${resumeText.slice(0, 3000)}
-    `;
-  } else {
-    // SCENARIO B: No resume was uploaded
-    techLeadPrompt = `
-      IDENTITY: You are a grumpy, skeptical Senior Engineer interviewing a NEW GRADUATE Full-Stack Developer. 
-      
-      CORE DIRECTIVES:
-      1. DIFFICULTY CAP: Keep questions to fundamental concepts (CORS, HTTP, React lifecycle, basic DB indexing). No massive system design or security scenarios.
-      2. FEEDBACK THEN PIVOT: When the user answers, FIRST evaluate their answer in one sentence. Correct them if they missed a key term (like 'Cache-Control headers'). THEN, ask a new question.
-      3. NATURAL FLOW: When you ask a new question, try to make it somewhat related to the previous topic before completely changing subjects.
-      4. Be Brief: Max 3 sentences total.
-    `;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Convert {sender, text} history to LangChain message objects,
+ * then truncate from the FRONT so we keep the most recent context.
+ * Filters out any injected hint messages to avoid contaminating history.
+ */
+function formatHistory(history) {
+  // Remove hint-injected fake user messages
+  const clean = history.filter((m) => m._isHint !== true);
+
+  const messages = clean.map((m) =>
+    m.sender === "user" ? new HumanMessage(m.text) : new AIMessage(m.text)
+  );
+
+  // Truncate from the front if total content is too long
+  let totalChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+  while (totalChars > MAX_HISTORY_CHARS && messages.length > 2) {
+    const removed = messages.shift();
+    totalChars -= removed.content.length;
   }
 
-  // 2. The Supervisor (Router) 
-  const supervisorPrompt = `
-    Analyze user input: "${userInput}".
-    - If they are answering a technical question or saying they are ready -> "TECH_LEAD"
-    - If they are nervous, stuck, or greeting generally -> "HR"
-  `;
+  return messages;
+}
 
-  const routerResponse = await model.invoke([
-    new SystemMessage("You are a router. Output only 'TECH_LEAD' or 'HR'."),
-    new HumanMessage(supervisorPrompt)
-  ]);
-  
-  const chosenAgent = routerResponse.content.trim();
-  console.log(`🤖 Supervisor selected: ${chosenAgent}`);
+// ─── Main agent ───────────────────────────────────────────────────────────────
 
-  // 3. Select the final prompt based on the router
-  let finalSystemPrompt = chosenAgent === "TECH_LEAD" ? techLeadPrompt : hrPrompt;
-  
+/**
+ * Single-agent interview runner. No separate router call.
+ *
+ * The system prompt handles both technical and supportive tones
+ * based on context, cutting latency in half vs. the router approach.
+ */
+async function runInterviewAgent(userInput, conversationHistory = [], resumeText = "") {
+  const resumeSection = resumeText?.trim()
+    ? `CANDIDATE RESUME (use this as your question source):\n${resumeText.slice(0, 3000)}`
+    : `NO RESUME PROVIDED — ask general junior full-stack questions (CORS, HTTP methods,
+React lifecycle, basic SQL indexing, etc.).`;
+
+  const systemPrompt = `You are a Senior Engineer conducting a mock technical interview for a junior/new-grad candidate.
+
+PERSONA
+- Direct and no-nonsense, but not cruel. Think "busy engineer who genuinely wants the candidate to succeed."
+- If the candidate seems confident and is answering well: stay technical, probe gently.
+- If the candidate seems lost, nervous, or gives a very short/confused answer: briefly acknowledge it ("No worries, let's try a different angle.") then ask something simpler or related. You do NOT need to be a separate HR agent for this — just be human.
+
+QUESTION RULES
+1. Ask exactly ONE question per turn. Never ask multiple questions.
+2. Pick from the resume if provided; otherwise use general junior concepts.
+3. Keep difficulty appropriate: core concepts only (no distributed systems, no advanced security). 
+4. After a good answer: give one sentence of feedback, then move to a DIFFERENT topic.
+5. After a weak answer: give a one-sentence correction with the key term they missed, then ask a simpler follow-up on the same topic.
+6. Max 3 sentences total per response.
+
+${resumeSection}`;
+
+  const history = formatHistory(conversationHistory);
+
   const response = await model.invoke([
-    new SystemMessage(finalSystemPrompt),
-    ...conversationHistory, // Include past chat context
-    new HumanMessage(userInput)
+    new SystemMessage(systemPrompt),
+    ...history,
+    new HumanMessage(userInput),
   ]);
 
   return {
-    agent: chosenAgent,
-    response: response.content
+    // No more "agent" field — there is only one agent now.
+    // Keeping the key for backwards compatibility with any frontend that reads it.
+    agent: "INTERVIEWER",
+    response: response.content,
   };
 }
 
-// 4. Panic Button (Hint System)
-const hintPrompt = `
-You are a helpful colleague whispering a hint to a candidate.
-- Look at the interviewer's last question.
-- If it is a technical question, give a subtle 1-sentence clue (e.g., "Psst! Try a Hash Map...").
-- If it is an introduction or behavioral question (like "Introduce yourself"), give a 1-sentence tip on how to answer (e.g., "Psst! Mention your current degree, your primary tech stack, and your best project.").
-- DO NOT give the exact answer. Be brief.
-`;
+// ─── Hint system ──────────────────────────────────────────────────────────────
 
+/**
+ * Generates a hint without contaminating the main conversation history.
+ * The hint call is fully isolated — it reads history but never writes to it.
+ */
 async function generateHint(conversationHistory) {
+  const systemPrompt = `You are a helpful colleague whispering a hint to an interview candidate.
+- Look at the interviewer's last question in the conversation.
+- If it's a technical question: give a subtle 1-sentence clue. Do NOT give the answer. Example: "Psst — think about what happens to variables declared inside a closure."
+- If it's behavioural or introductory: give a 1-sentence tip on structure. Example: "Psst — mention your stack, a project, and what you're excited to learn."
+- One sentence only. No preamble.`;
+
+  // Read-only: we pass history but do NOT add the hint prompt to it
+  const history = formatHistory(conversationHistory);
+
   const response = await model.invoke([
-    new SystemMessage(hintPrompt),
-    ...conversationHistory, // context is needed to know the question
-    new HumanMessage("I am stuck. Give me a hint.") 
+    new SystemMessage(systemPrompt),
+    ...history,
+    new HumanMessage("[SYSTEM] The candidate pressed the hint button. Give them a hint."),
   ]);
 
   return response.content;
 }
 
-// 5. Scorecard (Analytics)
-const graderPrompt = `
-You are a strict Senior Hiring Manager grading an interview transcript.
-Output a JSON object ONLY. Do not write any other text (no markdown formatting).
+// ─── Scorecard ────────────────────────────────────────────────────────────────
 
-CRITICAL RULES:
-1. Did the user actually answer anything? Look closely. If the user provided NO ANSWERS, or only asked for hints, the scores MUST be 0.
-2. Base your scores STRICTLY on what the user said. Do not invent performance.
-3. If the user said nothing, the feedback should simply state: "Incomplete interview. No answers provided."
+const SCORECARD_SCHEMA = `{
+  "technical_score": <integer 0-10>,
+  "communication_score": <integer 0-10>,
+  "feedback": "<1-2 sentences on what they did well>",
+  "improvement": "<1-2 sentences on what to study>"
+}`;
 
-Format:
-{
-  "technical_score": (0-10),
-  "communication_score": (0-10),
-  "feedback": "1-2 sentences on what they did well.",
-  "improvement": "1-2 sentences on what they need to study."
-}
-`;
+const EMPTY_SCORECARD = {
+  technical_score: 0,
+  communication_score: 0,
+  feedback: "Incomplete interview — no substantive answers were provided.",
+  improvement: "Attempt at least a few questions before ending the session.",
+};
 
+/**
+ * Grades the interview. Enforces zero scores structurally:
+ * if the candidate never answered anything, we return the empty scorecard
+ * directly without even calling the LLM.
+ */
 async function generateScorecard(conversationHistory) {
+  // Count actual user answers (not hint injections, not one-word "ready" messages)
+  const userAnswers = conversationHistory.filter(
+    (m) => m.sender === "user" && m._isHint !== true && m.text.trim().length > 20
+  );
+
+  if (userAnswers.length === 0) {
+    return EMPTY_SCORECARD;
+  }
+
+  const systemPrompt = `You are a strict Senior Hiring Manager grading an interview transcript.
+Output ONLY a raw JSON object. No markdown, no backticks, no preamble.
+
+Scoring rules:
+- Base scores strictly on what the candidate actually said. Do not invent performance.
+- Technical score: 0 if they answered nothing technical, 10 if they answered everything correctly and confidently.
+- Communication score: based on clarity and structure of their answers.
+
+Required format:
+${SCORECARD_SCHEMA}`;
+
+  const history = formatHistory(conversationHistory);
+
   const response = await model.invoke([
-    new SystemMessage(graderPrompt),
-    ...conversationHistory,
-    new HumanMessage("The interview is over. Generate the scorecard JSON.")
+    new SystemMessage(systemPrompt),
+    ...history,
+    new HumanMessage("The interview is over. Output the scorecard JSON now."),
   ]);
 
-  // Clean the output (sometimes LLMs add \`\`\`json ... \`\`\`)
-  const cleanJson = response.content.replace(/```json/g, '').replace(/```/g, '').trim();
-  
-  try {
-    return JSON.parse(cleanJson);
-  } catch (e) {
-    return { feedback: "Error parsing scorecard." }; // Fallback
+  const content = response.content;
+  const start = content.indexOf("{");
+  const end = content.lastIndexOf("}");
+
+  if (start !== -1 && end !== -1) {
+    try {
+      return JSON.parse(content.substring(start, end + 1));
+    } catch (e) {
+      console.error("Scorecard JSON parse error:", e);
+    }
   }
+
+  return {
+    ...EMPTY_SCORECARD,
+    feedback: "The model returned a malformed scorecard. Try ending the interview again.",
+  };
 }
 
-// 6. Session Summarization (Titles)
-const titlePrompt = `
-You are a summarization AI. 
-Read the interview transcript and generate a short, catchy title (maximum 4 words).
-Focus on the main technical topics discussed.
-
-CRITICAL RULES:
-1. Output ONLY the title string. No quotes, no preamble, no markdown.
-2. Max 4 words.
-3. Example output: "React Hooks & Big O" or "Java Method Overriding".
-`;
+// ─── Title generation ─────────────────────────────────────────────────────────
 
 async function generateTitle(conversationHistory) {
+  if (conversationHistory.length < 2) {
+    return `Interview ${new Date().toLocaleDateString()}`;
+  }
+
   try {
+    const systemPrompt = `Summarize this interview transcript as a short title.
+Output ONLY the title. No quotes, no punctuation at the end, no preamble.
+Max 4 words. Focus on the main technical topics discussed.
+Examples: "React Hooks and Closures", "SQL Indexing Basics", "Java OOP Fundamentals"`;
+
+    const history = formatHistory(conversationHistory);
+
     const response = await model.invoke([
-      new SystemMessage(titlePrompt),
-      ...conversationHistory,
-      new HumanMessage("Generate the 4-word title for this session.")
+      new SystemMessage(systemPrompt),
+      ...history,
+      new HumanMessage("Generate the title."),
     ]);
-    
-    // Clean up just in case the AI adds quotes
-    return response.content.replace(/["']/g, '').trim(); 
+
+    return response.content.replace(/["'`]/g, "").trim();
   } catch (error) {
-    console.error("Title Generation Error", error);
-    // Fallback title just in case the AI fails
-    return `Interview ${new Date().toLocaleDateString()}`; 
+    console.error("Title generation error:", error);
+    return `Interview ${new Date().toLocaleDateString()}`;
   }
 }
 

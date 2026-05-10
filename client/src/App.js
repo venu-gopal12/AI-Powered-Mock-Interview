@@ -143,27 +143,34 @@ function App() {
 
               {/* Chat History */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {viewingPastChat?.messages.map((msg, index) => (
-                  <div key={index} style={{ display: 'flex', gap: '1rem', justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}>
-                    
-                    {msg.sender !== 'user' && (
-                      <div style={{ width: '32px', height: '32px', borderRadius: '4px', background: msg.sender === 'TECH_LEAD' ? '#10a37f' : msg.sender === 'system' ? '#888' : '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        {msg.sender === 'TECH_LEAD' ? '😠' : msg.sender === 'HR' ? '👩‍💼' : '🤖'}
+                {viewingPastChat?.messages ? (
+                  viewingPastChat.messages.map((msg, index) => (
+                    <div key={index} style={{ display: 'flex', gap: '1rem', justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}>
+                      
+                      {msg.sender !== 'user' && (
+                        <div style={{ width: '32px', height: '32px', borderRadius: '4px', background: msg.sender === 'TECH_LEAD' || msg.sender === 'INTERVIEWER' ? '#10a37f' : msg.sender === 'system' ? '#888' : '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {msg.sender === 'TECH_LEAD' || msg.sender === 'INTERVIEWER' ? '🧑💻' : msg.sender === 'HR' || msg.sender === 'HR_WHISPER' ? '👩‍💼' : '🤖'}
+                        </div>
+                      )}
+
+                      <div style={{ 
+                        backgroundColor: msg.sender === 'user' ? 'var(--user-bubble)' : 'transparent',
+                        padding: msg.sender === 'user' ? '0.75rem 1.25rem' : '0.5rem 0',
+                        borderRadius: msg.sender === 'user' ? '1.5rem 1.5rem 0.25rem 1.5rem' : '0',
+                        maxWidth: '85%',
+                        lineHeight: 1.5
+                      }}>
+                        {msg.text}
                       </div>
-                    )}
 
-                    <div style={{ 
-                      backgroundColor: msg.sender === 'user' ? 'var(--user-bubble)' : 'transparent',
-                      padding: msg.sender === 'user' ? '0.75rem 1.25rem' : '0.5rem 0',
-                      borderRadius: msg.sender === 'user' ? '1.5rem 1.5rem 0.25rem 1.5rem' : '0',
-                      maxWidth: '85%',
-                      lineHeight: 1.5
-                    }}>
-                      {msg.text}
                     </div>
-
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)', border: '1px dashed var(--border-color)', borderRadius: '1rem' }}>
+                    <p>Full chat history was not saved for this session to optimize performance.</p>
+                    <p style={{ fontSize: '0.85rem' }}>You can still see the results and scores in the sidebar or dashboard.</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
