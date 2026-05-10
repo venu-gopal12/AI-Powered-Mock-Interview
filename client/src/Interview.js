@@ -62,7 +62,6 @@ const Interview = ({ onInterviewEnd }) => {
   const [language, setLanguage] = useState("javascript"); 
   const [attachCode, setAttachCode] = useState(false);
   const [scorecard, setScorecard] = useState(null); 
-  const [currentAgent, setCurrentAgent] = useState(null);
   
   // FIX #4: Tour should only be marked complete AFTER the user finishes/skips it,
   // not the moment it starts. Removed the premature localStorage.setItem effect.
@@ -229,10 +228,11 @@ const Interview = ({ onInterviewEnd }) => {
         history: newHistory,
         resumeContext,
       });
-      const { agent, response } = res.data;
+      const { response } = res.data;
+      
       setIsTyping(false);
-      setMessages((prev) => [...prev, { sender: agent, text: response }]);
-      speak(response, agent);
+      setMessages((prev) => [...prev, { sender: 'INTERVIEWER', text: response }]);
+      speak(response, 'INTERVIEWER');
     } catch (error) {
       console.error('Error talking to AI:', error);
       setIsTyping(false);
