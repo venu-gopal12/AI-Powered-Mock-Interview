@@ -20,6 +20,9 @@ const VolumeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" heig
 const HelpIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
 const SparklesIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>;
 const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+const MessageSquareIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
+const CodeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
+const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>;
 
 // ─── Voice selection: match by language, not fragile index ───────────────────
 function pickVoice(voices, preferMale = false) {
@@ -62,6 +65,9 @@ const Interview = ({ onInterviewEnd }) => {
   const [language, setLanguage] = useState("javascript"); 
   const [attachCode, setAttachCode] = useState(false);
   const [scorecard, setScorecard] = useState(null); 
+  const [activePanel, setActivePanel] = useState('chat'); // 'chat' or 'code' for mobile
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showCodeNudge, setShowCodeNudge] = useState(false);
   
   // FIX #4: Tour should only be marked complete AFTER the user finishes/skips it,
   // not the moment it starts. Removed the premature localStorage.setItem effect.
@@ -124,6 +130,14 @@ const Interview = ({ onInterviewEnd }) => {
   useEffect(() => {
     localStorage.setItem('interviewResumeContext', resumeContext);
   }, [resumeContext]);
+
+  // Close mobile menu on Escape
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const onKey = (e) => e.key === 'Escape' && setIsMobileMenuOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMobileMenuOpen]);
 
   // Speech recognition setup
   useEffect(() => {
@@ -232,6 +246,15 @@ const Interview = ({ onInterviewEnd }) => {
       
       setIsTyping(false);
       setMessages((prev) => [...prev, { sender: 'INTERVIEWER', text: response }]);
+      
+      // Nudge logic: simple heuristic to see if AI asked for code
+      const lowerResponse = response.toLowerCase();
+      if (lowerResponse.includes('code') || lowerResponse.includes('function') || lowerResponse.includes('program')) {
+        setShowCodeNudge(true);
+      } else {
+        setShowCodeNudge(false);
+      }
+
       speak(response, 'INTERVIEWER');
     } catch (error) {
       console.error('Error talking to AI:', error);
@@ -287,6 +310,8 @@ const Interview = ({ onInterviewEnd }) => {
     setScorecard(null);
     setInputText('');
     setCode('// Write your solution here...\n');
+    setShowCodeNudge(false);
+    setActivePanel('chat');
     localStorage.removeItem('interviewMessages');
     localStorage.removeItem('interviewResumeContext');
   };
@@ -423,33 +448,45 @@ const Interview = ({ onInterviewEnd }) => {
           <SparklesIcon />
           <span>Interview Agent</span>
         </div>
-        <div className="header-actions">
-          {/* FIX #1: New interview button */}
-          <button
-            onClick={startNewInterview}
-            className="btn-secondary"
-            title="Start a new interview"
-          >
+        
+        <button
+          className="mobile-menu-toggle"
+          onClick={() => setIsMobileMenuOpen((v) => !v)}
+          aria-label="Open menu"
+        >
+          <MenuIcon />
+        </button>
+
+        <div className={`header-actions ${isMobileMenuOpen ? 'open' : ''}`}>
+          <button onClick={() => { startNewInterview(); setIsMobileMenuOpen(false); }} className="btn-secondary">
             <PlusIcon /> New
           </button>
           <label className="btn-secondary tour-resume-step">
             <UploadIcon /> Resume
-            <input type="file" accept=".pdf" hidden onChange={handleFileUpload} />
+            <input type="file" accept="application/pdf" hidden
+              onChange={(e) => { handleFileUpload(e); setIsMobileMenuOpen(false); }} />
           </label>
-          <button
-            onClick={endInterview}
-            className="btn-secondary btn-danger tour-end-step"
-            title="End & Grade"
-          >
+          <button onClick={() => { endInterview(); setIsMobileMenuOpen(false); }}
+            className="btn-secondary btn-danger tour-end-step">
             <StopIcon /> End
           </button>
         </div>
       </header>
+      
+      <div
+        className={`mobile-menu-backdrop ${isMobileMenuOpen ? 'open' : ''}`}
+        onClick={() => setIsMobileMenuOpen(false)}
+      />
 
       <div className="workspace-container">
-        <main className="chat-main">
+        <main className={`chat-main ${activePanel === 'chat' ? 'active' : ''}`}>
           <div className="messages-list">
             <div className="messages-center">
+              {showCodeNudge && activePanel === 'chat' && (
+                <div className="code-nudge-banner" onClick={() => setActivePanel('code')}>
+                  <span>The interviewer asked for code. Open sandbox →</span>
+                </div>
+              )}
               {messages.length === 0 && (
                 <div className="empty-state-container">
                   <div className="empty-state-header">
@@ -608,15 +645,25 @@ const Interview = ({ onInterviewEnd }) => {
                   />
                   Attach sandbox code
                 </label>
-                <span>Interview Agent can make mistakes. Focus on highlighting your strengths.</span>
+                <span className="footer-disclaimer">Interview Agent can make mistakes. Focus on highlighting your strengths.</span>
               </div>
             </div>
           </div>
         </main>
 
-        <div className="editor-panel tour-code-step">
-          <div className="editor-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3>Code Sandbox</h3>
+        <div className={`editor-panel tour-code-step ${activePanel === 'code' ? 'active' : ''}`}>
+          <div className="editor-header">
+            <div className="editor-header-left">
+              <h3>Code Sandbox</h3>
+              <label className="mobile-attach-checkbox">
+                <input
+                  type="checkbox"
+                  checked={attachCode}
+                  onChange={(e) => setAttachCode(e.target.checked)}
+                />
+                Attach code
+              </label>
+            </div>
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
@@ -642,6 +689,24 @@ const Interview = ({ onInterviewEnd }) => {
           />
         </div>
       </div>
+
+      <nav className="mobile-tab-bar">
+        <button 
+          className={`tab-item ${activePanel === 'chat' ? 'active' : ''}`}
+          onClick={() => setActivePanel('chat')}
+        >
+          <MessageSquareIcon />
+          <span>Chat</span>
+        </button>
+        <button 
+          className={`tab-item ${activePanel === 'code' ? 'active' : ''}`}
+          onClick={() => setActivePanel('code')}
+        >
+          <CodeIcon />
+          <span>Code</span>
+          {showCodeNudge && <span className="tab-dot" />}
+        </button>
+      </nav>
 
       {scorecard && (
         <div className="modal-overlay">

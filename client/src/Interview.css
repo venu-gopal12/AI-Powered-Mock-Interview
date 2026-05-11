@@ -85,6 +85,24 @@ body {
   padding: 10px 15px;
   font-family: 'Inter', sans-serif;
   border-bottom: 1px solid #333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.mobile-attach-checkbox {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #aaa;
+  cursor: pointer;
 }
 
 .editor-header h3 {
@@ -599,29 +617,186 @@ body {
 @media (max-width: 768px) {
   .workspace-container {
     flex-direction: column;
+    height: calc(100vh - 60px - 60px); /* height - header - tabbar */
   }
   .chat-main {
-    flex: none;
-    height: 55vh;
+    flex: 1;
+    height: 100%;
+    display: none;
+  }
+  .chat-main.active {
+    display: flex;
   }
   .editor-panel {
-    flex: none;
-    height: 45vh;
+    flex: 1;
+    height: 100%;
+    display: none;
+    border-left: none;
+  }
+  .editor-panel.active {
+    display: flex;
   }
   .app-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-  }
-  .header-actions {
-    width: 100%;
-    justify-content: flex-end;
+    height: 60px;
+    padding: 0 1rem;
+    position: relative;
+    z-index: 101; /* sit above the backdrop */
+    overflow: visible;
   }
   .logo-area {
-    margin-left: 36px;
+    margin-left: 0;
+  }
+  .header-actions {
+    display: none !important; /* hidden by default — hamburger reveals it */
+    position: absolute;
+    top: calc(100% + 8px);   /* anchor just below header, no magic 60px */
+    right: 1rem;
+    left: auto;
+    width: max-content;
+    min-width: 200px;
+    max-width: calc(100vw - 2rem);
+    background: var(--bg-color);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-md);
+    z-index: 102;
+  }
+  .header-actions.open {
+    display: flex !important;
+  }
+
+  .header-actions .btn-secondary {
+    display: flex;                  /* re-assert in case parent overrode */
+    width: 100%;
+    justify-content: flex-start;
+    white-space: nowrap;
+  }
+
+  /* The "Resume" button is a <label>, not a <button> — make sure it shows too */
+  .header-actions label.btn-secondary {
+    display: flex;
+  }
+  .mobile-menu-toggle {
+    display: flex !important;
+  }
+  .action-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
   }
   .input-textarea {
     font-size: 16px; /* prevent iOS zoom */
   }
+  .input-footer {
+    display: none !important;
+  }
+  .mobile-attach-checkbox {
+    display: flex;
+  }
+}
+
+.mobile-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.mobile-tab-bar {
+  display: none;
+  height: 60px;
+  background: var(--bg-color);
+  border-top: 1px solid var(--border-color);
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 1rem;
+}
+
+.mobile-menu-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 100;
+}
+
+/* only activate inside mobile */
+@media (max-width: 768px) {
+  .mobile-menu-backdrop.open {
+    display: block;
+    animation: fadeIn 0.15s ease-out;
+  }
+  .mobile-tab-bar {
+    display: flex;
+  }
+}
+
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  padding: 0.5rem;
+  flex: 1;
+}
+
+.tab-item.active {
+  color: #10a37f;
+}
+
+.tab-item svg {
+  width: 20px;
+  height: 20px;
+}
+
+.tab-dot {
+  position: absolute;
+  top: 8px;
+  right: calc(50% - 14px);
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  border: 2px solid var(--bg-color);
+}
+
+.code-nudge-banner {
+  background: #10a37f;
+  color: white;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: slideDown 0.3s ease-out;
+  box-shadow: 0 4px 12px rgba(16, 163, 127, 0.2);
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.footer-disclaimer {
+  flex: 1;
+  text-align: center;
 }
