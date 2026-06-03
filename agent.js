@@ -49,7 +49,7 @@ function formatHistory(history) {
  */
 async function runInterviewAgent(userInput, conversationHistory = [], resumeText = "") {
   const resumeSection = resumeText?.trim()
-    ? `CANDIDATE RESUME (use this as your question source):\n${resumeText.slice(0, 3000)}`
+    ? `CANDIDATE RESUME (use this as your question source):\n${resumeText.slice(0, 10000)}`
     : `NO RESUME PROVIDED — ask general junior full-stack questions (CORS, HTTP methods,
 React lifecycle, basic SQL indexing, etc.).`;
 

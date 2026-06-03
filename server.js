@@ -65,9 +65,14 @@ app.post('/upload-resume', upload.single('resume'), async (req, res) => {
     const data = await pdf(req.file.buffer);
     console.log(`✅ Parsed. Text length: ${data.text.length}`);
 
+    // Pass raw resume text to preserve all project details
+    // We slice to a reasonable length (10000 chars) to prevent massive payloads
+    const rawText = data.text.trim().slice(0, 10000);
+    console.log(`✅ Extracted raw text. Length: ${rawText.length}`);
+
     res.json({
       message: "Resume received. The interviewer is reading it now...",
-      resumeText: data.text,
+      resumeText: rawText,
     });
   } catch (error) {
     console.error('🔥 PDF parse error:', error);

@@ -352,7 +352,7 @@ const Interview = ({ onInterviewEnd }) => {
         title: title || 'Mock Interview',
         createdAt: new Date().toISOString(),
         scorecard: sc,
-        // Intentionally omitting `messages` to stay within the 5MB cap
+        messages: messages, // Saving messages so users can review the chat history
       };
 
       // Keep only the most recent MAX_SAVED_SESSIONS sessions
