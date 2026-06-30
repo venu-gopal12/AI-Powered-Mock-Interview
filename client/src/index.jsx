@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import axios from 'axios';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
@@ -11,8 +10,6 @@ if (!sessionId) {
   sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
   localStorage.setItem('interviewSessionId', sessionId);
 }
-// Automatically attach this ID to every backend request
-axios.defaults.headers.common['X-Session-ID'] = sessionId;
 // -------------------------------
 
 // Suppress benign ResizeObserver errors in development

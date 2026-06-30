@@ -24,6 +24,9 @@ const Dashboard = () => {
         Comm: s.scorecard?.communication_score ?? 0,
         feedback: s.scorecard?.feedback || '',
         improvement: s.scorecard?.improvement || '',
+        Overall: s.scorecard?.overall_score ??
+          Math.round((s.scorecard?.technical_score ?? 0) * 0.6 + (s.scorecard?.communication_score ?? 0) * 0.4),
+        recommendedActions: s.scorecard?.recommended_actions || [],
         title: s.title || 'Mock Interview',
         dateFormatted: s.createdAt
           ? new Date(s.createdAt).toLocaleDateString()
@@ -113,6 +116,7 @@ const Dashboard = () => {
 
   const avgTech = (data.reduce((acc, cur) => acc + cur.Tech, 0) / data.length).toFixed(1);
   const avgComm = (data.reduce((acc, cur) => acc + cur.Comm, 0) / data.length).toFixed(1);
+  const avgOverall = (data.reduce((acc, cur) => acc + cur.Overall, 0) / data.length).toFixed(1);
   const best = Math.max(...data.map((d) => d.Tech));
 
   return (
@@ -152,6 +156,7 @@ const Dashboard = () => {
           { label: 'Total Interviews', value: data.length, icon: <BarChart2 size={18} />, color: 'var(--text-secondary)' },
           { label: 'Avg Tech Score', value: avgTech, icon: <Award size={18} color="#d32f2f" />, color: '#d32f2f' },
           { label: 'Avg Comm Score', value: avgComm, icon: <MessageSquare size={18} color="#1976d2" />, color: '#1976d2' },
+          { label: 'Avg Overall', value: avgOverall, icon: <TrendingUp size={18} color="#7c3aed" />, color: '#7c3aed' },
           { label: 'Best Tech Score', value: `${best}/10`, icon: <TrendingUp size={18} color="#10a37f" />, color: '#10a37f' },
         ].map((stat) => (
           <div
@@ -243,6 +248,12 @@ const Dashboard = () => {
                 {session.improvement && (
                   <p style={{ margin: 0, fontSize: '0.92rem', lineHeight: 1.5 }}>
                     <strong style={{ color: '#1976d2' }}>Needs work: </strong>{session.improvement}
+                  </p>
+                )}
+                {session.recommendedActions?.[0] && (
+                  <p style={{ margin: '0.4rem 0 0', fontSize: '0.92rem', lineHeight: 1.5 }}>
+                    <strong style={{ color: '#10a37f' }}>Next practice: </strong>
+                    {session.recommendedActions[0].practice_question}
                   </p>
                 )}
               </div>

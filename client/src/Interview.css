@@ -462,7 +462,9 @@ body {
   padding: 2rem;
   border-radius: 1rem;
   width: 100%;
-  max-width: 500px;
+  max-width: 800px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   box-shadow: var(--shadow-md);
 }
 

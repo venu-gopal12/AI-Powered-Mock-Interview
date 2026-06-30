@@ -1,16 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import api from './api';
 import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Joyride, STATUS } from 'react-joyride';
+import { Joyride } from 'react-joyride';
 import './Interview.css';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
-// ─── Max sessions to keep in localStorage (saves scorecard only, not messages) ─
-const MAX_SAVED_SESSIONS = 30;
+import useInterviewSpeech from './useInterviewSpeech';
+import { clearActiveSession, loadJson, saveCompletedSession } from './sessionStorage';
+import Scorecard from './Scorecard';
+import {
+  DESKTOP_TOUR_STEPS,
+  MOBILE_TOUR_STEPS,
+  hasCompletedTour,
+} from './interviewTour';
 
 const UploadIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
 const MicIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>;
@@ -24,42 +27,31 @@ const MessageSquareIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="2
 const CodeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
 const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>;
 
+const DEFAULT_CONFIG = {
+  role: 'Full-Stack Developer',
+  level: 'junior',
+  duration: 20,
+  style: 'balanced',
+  focus: 'resume',
+};
+const DEFAULT_INTERVIEW_STATE = {
+  phase: 'introduction',
+  current_topic: '',
+  difficulty: 1,
+  follow_ups_on_topic: 0,
+  questions_answered: 0,
+  target_questions: 7,
+};
+
 // ─── Voice selection: match by language, not fragile index ───────────────────
-function pickVoice(voices, preferMale = false) {
-  const englishVoices = voices.filter(v => v.lang.startsWith('en'));
-  if (englishVoices.length === 0) return voices[0] || null;
-
-  // Heuristic: names containing 'Male', 'David', 'Daniel', 'Alex' → male-ish
-  const maleHints = ['male', 'david', 'daniel', 'alex', 'fred', 'tom', 'aaron', 'arthur'];
-  const femaleHints = ['female', 'samantha', 'karen', 'victoria', 'moira', 'fiona', 'tessa'];
-
-  if (preferMale) {
-    const male = englishVoices.find(v => maleHints.some(h => v.name.toLowerCase().includes(h)));
-    if (male) return male;
-  } else {
-    const female = englishVoices.find(v => femaleHints.some(h => v.name.toLowerCase().includes(h)));
-    if (female) return female;
-  }
-
-  // Fallback: just pick different voices for variety
-  return preferMale ? englishVoices[0] : (englishVoices[1] || englishVoices[0]);
-}
-
 const Interview = ({ onInterviewEnd }) => {
-  const [messages, setMessages] = useState(() => {
-    try {
-      const saved = localStorage.getItem('interviewMessages');
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const [messages, setMessages] = useState(() => loadJson('interviewMessages', []));
 
   const [resumeContext, setResumeContext] = useState(() => {
     return localStorage.getItem('interviewResumeContext') || '';
   });
 
-  const [isListening, setIsListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [inputText, setInputText] = useState(""); 
   const [code, setCode] = useState("// Write your solution here...\n"); 
   const [language, setLanguage] = useState("javascript"); 
@@ -68,6 +60,13 @@ const Interview = ({ onInterviewEnd }) => {
   const [activePanel, setActivePanel] = useState('chat'); // 'chat' or 'code' for mobile
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showCodeNudge, setShowCodeNudge] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const [interviewConfig, setInterviewConfig] = useState(() =>
+    loadJson('interviewConfig', DEFAULT_CONFIG)
+  );
+  const [interviewState, setInterviewState] = useState(() =>
+    loadJson('interviewState', DEFAULT_INTERVIEW_STATE)
+  );
   
   // FIX #4: Tour should only be marked complete AFTER the user finishes/skips it,
   // not the moment it starts. Removed the premature localStorage.setItem effect.
@@ -75,51 +74,44 @@ const Interview = ({ onInterviewEnd }) => {
     return !localStorage.getItem('interviewTourCompleted');
   });
 
-  const recognitionRef = useRef(null);
-  const transcriptRef = useRef('');
+  const messagesRef = useRef(messages);
+  const resumeContextRef = useRef(resumeContext);
+  const interviewConfigRef = useRef(interviewConfig);
+  const interviewStateRef = useRef(interviewState);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const {
+    isListening,
+    isTranscribing,
+    isSpeaking,
+    toggleListening,
+    speak,
+    stopSpeaking,
+  } = useInterviewSpeech((transcript) => {
+    setInputText((current) => current ? `${current.trim()} ${transcript}` : transcript);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  });
 
-  const tourSteps = [
-    {
-      target: '.tour-resume-step',
-      content: 'Start by uploading your resume. The AI will parse it and tailor the interview to your experience.',
-      disableBeacon: true,
-      placement: 'bottom',
-    },
-    {
-      target: '.tour-chat-step',
-      content: 'Type your answers here, or use the microphone to speak naturally.',
-      placement: 'top',
-    },
-    {
-      target: '.tour-code-step',
-      content: 'Write and submit real code here for technical questions.',
-      placement: 'left',
-    },
-    {
-      target: '.tour-end-step',
-      content: "When you're done, click here to end the interview and get your scorecard.",
-      placement: 'bottom-end',
-    },
-  ];
-
-  // FIX #4: Only mark tour complete when the user actually finishes or skips
   const handleJoyrideCallback = (data) => {
-    const { status, action, type } = data;
-    const done = [STATUS.FINISHED, STATUS.SKIPPED].includes(status)
-      || action === 'close'
-      || type === 'tour:end'
-      || type === 'error';
-
-    if (done) {
+    if (hasCompletedTour(data.status)) {
       localStorage.setItem('interviewTourCompleted', 'true');
+      setRunTour(false);
+    } else if (data.action === 'close') {
+      // Closing is a pause, not completion; the user can restart from Take tour.
       setRunTour(false);
     }
   };
 
+  const startTour = () => {
+    localStorage.removeItem('interviewTourCompleted');
+    setIsMobileMenuOpen(false);
+    setActivePanel('chat');
+    setRunTour(true);
+  };
+
   // Persist messages (needed for resume-in-progress recovery)
   useEffect(() => {
+    messagesRef.current = messages;
     try {
       localStorage.setItem('interviewMessages', JSON.stringify(messages));
     } catch (e) {
@@ -128,8 +120,19 @@ const Interview = ({ onInterviewEnd }) => {
   }, [messages]);
 
   useEffect(() => {
+    resumeContextRef.current = resumeContext;
     localStorage.setItem('interviewResumeContext', resumeContext);
   }, [resumeContext]);
+
+  useEffect(() => {
+    interviewConfigRef.current = interviewConfig;
+    localStorage.setItem('interviewConfig', JSON.stringify(interviewConfig));
+  }, [interviewConfig]);
+
+  useEffect(() => {
+    interviewStateRef.current = interviewState;
+    localStorage.setItem('interviewState', JSON.stringify(interviewState));
+  }, [interviewState]);
 
   // Close mobile menu on Escape
   useEffect(() => {
@@ -139,67 +142,29 @@ const Interview = ({ onInterviewEnd }) => {
     return () => window.removeEventListener('keydown', onKey);
   }, [isMobileMenuOpen]);
 
-  // Speech recognition setup
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'en-US';
-
-      recognitionRef.current.onstart = () => {
-        setIsListening(true);
-        transcriptRef.current = '';
-      };
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-        if (transcriptRef.current.trim().length > 0) {
-          handleUserMessage(transcriptRef.current);
-        }
-      };
-      recognitionRef.current.onerror = (e) => {
-        console.error('Speech recognition error:', e.error);
-        setIsListening(false);
-      };
-      recognitionRef.current.onresult = (event) => {
-        let final = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) final += event.results[i][0].transcript;
-        }
-        if (final) transcriptRef.current += final + ' ';
-      };
-    }
-    return () => {
-      recognitionRef.current?.stop();
-      window.speechSynthesis.cancel();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const media = window.matchMedia('(max-width: 768px)');
+    const updateViewport = (event) => setIsMobile(event.matches);
+    setIsMobile(media.matches);
+    media.addEventListener?.('change', updateViewport);
+    return () => media.removeEventListener?.('change', updateViewport);
+  }, []);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+  }, [inputText]);
+
   const handleInput = (e) => {
     setInputText(e.target.value);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
-    }
-  };
-
-  const toggleListening = () => {
-    if (!recognitionRef.current) {
-      alert("Speech recognition isn't supported in your browser. Please use text.");
-      return;
-    }
-    if (isListening) {
-      recognitionRef.current.stop();
-    } else {
-      transcriptRef.current = '';
-      recognitionRef.current.start();
-    }
   };
 
   const handleKeyDown = (e) => {
@@ -211,7 +176,7 @@ const Interview = ({ onInterviewEnd }) => {
 
   const handleTextSubmit = (e) => {
     e?.preventDefault();
-    if (!inputText.trim() || isTyping || isSpeaking) return;
+    if (!inputText.trim() || isTyping || isSpeaking || isTranscribing) return;
 
     let finalMessage = inputText;
     // Only attach code if the user explicitly checked "attach code"
@@ -224,28 +189,38 @@ const Interview = ({ onInterviewEnd }) => {
 
     handleUserMessage(finalMessage); 
     setInputText(""); 
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
   const handleUserMessage = async (text) => {
-    setIsListening(false);
-    if (window.speechSynthesis.speaking) stopSpeaking();
+    if (window.speechSynthesis?.speaking) stopSpeaking();
 
     const newMsg = { sender: 'user', text: text.trim() };
-    const newHistory = [...messages, newMsg];
+    const previousHistory = messagesRef.current;
+    const newHistory = [...previousHistory, newMsg];
+    messagesRef.current = newHistory;
     setMessages(newHistory);
     setIsTyping(true);
 
     try {
-      const res = await axios.post(`${API_URL}/interview`, {
+      const res = await api.post('/interview', {
         message: text,
-        history: newHistory,
-        resumeContext,
+        history: previousHistory,
+        resumeContext: resumeContextRef.current,
+        interviewConfig: interviewConfigRef.current,
+        interviewState: interviewStateRef.current,
       });
-      const { response } = res.data;
+      const { response, interviewState: nextInterviewState } = res.data;
+      if (nextInterviewState) {
+        interviewStateRef.current = nextInterviewState;
+        setInterviewState(nextInterviewState);
+      }
       
       setIsTyping(false);
-      setMessages((prev) => [...prev, { sender: 'INTERVIEWER', text: response }]);
+      setMessages((prev) => {
+        const next = [...prev, { sender: 'INTERVIEWER', text: response }];
+        messagesRef.current = next;
+        return next;
+      });
       
       // Nudge logic: simple heuristic to see if AI asked for code
       const lowerResponse = response.toLowerCase();
@@ -255,7 +230,7 @@ const Interview = ({ onInterviewEnd }) => {
         setShowCodeNudge(false);
       }
 
-      speak(response, 'INTERVIEWER');
+      speak(response, true);
     } catch (error) {
       console.error('Error talking to AI:', error);
       setIsTyping(false);
@@ -264,40 +239,6 @@ const Interview = ({ onInterviewEnd }) => {
         { sender: 'system', text: 'Sorry, I encountered an error connecting to the server.' },
       ]);
     }
-  };
-
-  const cleanTextForSpeech = (text) =>
-    text
-      .replace(/\*\*/g, '')
-      .replace(/\*/g, '')
-      .replace(/`/g, '')
-      .replace(/#/g, '')
-      .replace(/\[.*?\]/g, '')
-      .replace(/https?:\/\/\S+/g, 'link');
-
-  // FIX #2: Pick voice by language/name heuristic, not brittle index
-  const speak = (text, agent) => {
-    const spokenText = cleanTextForSpeech(text);
-    if (isListening && recognitionRef.current) recognitionRef.current.stop();
-
-    const utterance = new SpeechSynthesisUtterance(spokenText);
-    const voices = window.speechSynthesis.getVoices();
-
-    const preferMale = agent === 'INTERVIEWER' || agent === 'TECH_LEAD';
-    utterance.voice = pickVoice(voices, preferMale);
-    utterance.pitch = preferMale ? 0.85 : 1.1;
-    utterance.rate = preferMale ? 1.05 : 0.95;
-
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const stopSpeaking = () => {
-    window.speechSynthesis.cancel();
-    setIsSpeaking(false);
   };
 
   // FIX #1: New interview button — clears active session from localStorage
@@ -312,20 +253,24 @@ const Interview = ({ onInterviewEnd }) => {
     setCode('// Write your solution here...\n');
     setShowCodeNudge(false);
     setActivePanel('chat');
-    localStorage.removeItem('interviewMessages');
-    localStorage.removeItem('interviewResumeContext');
+    setInterviewConfig(DEFAULT_CONFIG);
+    setInterviewState(DEFAULT_INTERVIEW_STATE);
+    interviewConfigRef.current = DEFAULT_CONFIG;
+    interviewStateRef.current = DEFAULT_INTERVIEW_STATE;
+    messagesRef.current = [];
+    clearActiveSession();
   };
 
   const handlePanic = async () => {
     if (isTyping) return;
     setIsTyping(true);
     try {
-      const res = await axios.post(`${API_URL}/hint`, { history: messages });
+      const res = await api.post('/hint', { history: messagesRef.current });
       const hintText = res.data.hint;
       setIsTyping(false);
       // FIX: mark hint messages so agent.js can filter them out of history
       setMessages((prev) => [...prev, { sender: 'HR_WHISPER', text: hintText, _isHint: true }]);
-      speak(hintText, 'HR');
+      speak(hintText, false);
     } catch {
       setIsTyping(false);
     }
@@ -340,28 +285,21 @@ const Interview = ({ onInterviewEnd }) => {
     if (!window.confirm('End the interview and get your score?')) return;
 
     try {
-      const res = await axios.post(`${API_URL}/end-interview`, { history: messages });
+      const res = await api.post('/end-interview', { history: messagesRef.current });
       const { scorecard: sc, title } = res.data;
       setScorecard(sc);
 
-      // FIX #6: Save scorecard only — NOT the full message array.
-      // This keeps localStorage small regardless of how many sessions accumulate.
-      const savedSessions = JSON.parse(localStorage.getItem('savedSessions') || '[]');
       const newSession = {
         _id: Date.now().toString(),
         title: title || 'Mock Interview',
         createdAt: new Date().toISOString(),
         scorecard: sc,
-        messages: messages, // Saving messages so users can review the chat history
+        messages: messagesRef.current,
       };
-
-      // Keep only the most recent MAX_SAVED_SESSIONS sessions
-      const trimmed = [...savedSessions, newSession].slice(-MAX_SAVED_SESSIONS);
-      localStorage.setItem('savedSessions', JSON.stringify(trimmed));
+      saveCompletedSession(newSession);
 
       // Clear active interview state
-      localStorage.removeItem('interviewMessages');
-      localStorage.removeItem('interviewResumeContext');
+      clearActiveSession();
 
       if (onInterviewEnd) onInterviewEnd();
     } catch (err) {
@@ -399,15 +337,17 @@ const Interview = ({ onInterviewEnd }) => {
     setIsTyping(true);
 
     try {
-      const res = await axios.post(`${API_URL}/upload-resume`, formData, {
+      const res = await api.post('/upload-resume', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const { resumeText } = res.data;
       setResumeContext(resumeText);
+      setInterviewState(DEFAULT_INTERVIEW_STATE);
+      interviewStateRef.current = DEFAULT_INTERVIEW_STATE;
       setIsTyping(false);
-      const startMsg = "I have your resume. Let's see if your skills match the paper. Introduce yourself.";
+      const startMsg = `Thanks, I have your resume. We'll run a ${interviewConfigRef.current.duration}-minute ${interviewConfigRef.current.role} interview. To begin, please give me a concise introduction.`;
       setMessages([{ sender: 'INTERVIEWER', text: startMsg }]);
-      speak(startMsg, 'INTERVIEWER');
+      speak(startMsg, true);
     } catch (error) {
       setIsTyping(false);
       console.error('Upload failed:', error);
@@ -439,7 +379,7 @@ const Interview = ({ onInterviewEnd }) => {
         showSkipButton={true}
         disableScrolling={true}
         floaterProps={{ disableAnimation: true }}
-        steps={tourSteps}
+        steps={isMobile ? MOBILE_TOUR_STEPS : DESKTOP_TOUR_STEPS}
         styles={{ options: { primaryColor: '#10a37f', zIndex: 10000 } }}
       />
 
@@ -448,6 +388,22 @@ const Interview = ({ onInterviewEnd }) => {
           <SparklesIcon />
           <span>Interview Agent</span>
         </div>
+        {messages.length > 0 && (
+          <div style={{ minWidth: 180, maxWidth: 280, flex: 1, margin: '0 1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+              <span>{String(interviewState.phase || 'introduction').replaceAll('_', ' ')}</span>
+              <span>{interviewState.questions_answered || 0}/{interviewState.target_questions || 7}</span>
+            </div>
+            <div style={{ height: 4, borderRadius: 4, background: 'var(--border-color)', marginTop: 4 }}>
+              <div style={{
+                height: '100%',
+                borderRadius: 4,
+                background: '#10a37f',
+                width: `${Math.min(100, ((interviewState.questions_answered || 0) / (interviewState.target_questions || 7)) * 100)}%`,
+              }} />
+            </div>
+          </div>
+        )}
         
         <button
           className="mobile-menu-toggle"
@@ -458,6 +414,9 @@ const Interview = ({ onInterviewEnd }) => {
         </button>
 
         <div className={`header-actions ${isMobileMenuOpen ? 'open' : ''}`}>
+          <button onClick={startTour} className="btn-secondary">
+            <HelpIcon /> Take tour
+          </button>
           <button onClick={() => { startNewInterview(); setIsMobileMenuOpen(false); }} className="btn-secondary">
             <PlusIcon /> New
           </button>
@@ -492,7 +451,56 @@ const Interview = ({ onInterviewEnd }) => {
                   <div className="empty-state-header">
                     <div className="empty-state-icon"><SparklesIcon /></div>
                     <h2>AI Mock Interviewer</h2>
-                    <p>Upload your resume to get started, or simply say hello.</p>
+                    <p>Choose your interview setup, then upload a resume or simply say hello.</p>
+                  </div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                    gap: '0.75rem',
+                    width: '100%',
+                    maxWidth: 760,
+                    margin: '0 auto 1.5rem',
+                    padding: '1rem',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '0.75rem',
+                    background: 'var(--input-bg)',
+                  }}>
+                    <label style={{ display: 'grid', gap: 4, fontSize: '0.8rem' }}>
+                      Target role
+                      <input
+                        value={interviewConfig.role}
+                        maxLength={80}
+                        onChange={(event) => setInterviewConfig((current) => ({
+                          ...current,
+                          role: event.target.value,
+                        }))}
+                        style={{ padding: '0.55rem', borderRadius: 6, border: '1px solid var(--border-color)' }}
+                      />
+                    </label>
+                    {[
+                      ['level', 'Level', ['junior', 'mid', 'senior']],
+                      ['duration', 'Duration', [10, 20, 30]],
+                      ['style', 'Style', ['supportive', 'balanced', 'strict']],
+                      ['focus', 'Focus', ['resume', 'frontend', 'backend', 'full-stack', 'behavioral']],
+                    ].map(([key, label, options]) => (
+                      <label key={key} style={{ display: 'grid', gap: 4, fontSize: '0.8rem' }}>
+                        {label}
+                        <select
+                          value={interviewConfig[key]}
+                          onChange={(event) => setInterviewConfig((current) => ({
+                            ...current,
+                            [key]: key === 'duration' ? Number(event.target.value) : event.target.value,
+                          }))}
+                          style={{ padding: '0.55rem', borderRadius: 6, border: '1px solid var(--border-color)' }}
+                        >
+                          {options.map((option) => (
+                            <option key={option} value={option}>
+                              {key === 'duration' ? `${option} minutes` : String(option).replace('-', ' ')}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
                   </div>
                   <div className="feature-grid">
                     <div className="feature-card">
@@ -608,12 +616,18 @@ const Interview = ({ onInterviewEnd }) => {
                   ref={textareaRef}
                   className="input-textarea"
                   placeholder={
-                    isSpeaking ? 'AI is speaking...' : isListening ? 'Listening...' : 'Message AI Interviewer...'
+                    isSpeaking
+                      ? 'AI is speaking...'
+                      : isTranscribing
+                        ? 'Transcribing your answer...'
+                        : isListening
+                          ? 'Recording... click stop when finished'
+                          : 'Message AI Interviewer...'
                   }
                   value={inputText}
                   onChange={handleInput}
                   onKeyDown={handleKeyDown}
-                  disabled={isSpeaking || isTyping}
+                  disabled={isSpeaking || isTyping || isTranscribing}
                   rows="1"
                 />
                 <div style={{ display: 'flex', gap: '4px' }}>
@@ -621,15 +635,15 @@ const Interview = ({ onInterviewEnd }) => {
                     type="button"
                     className={`action-icon-btn mic ${isListening ? 'active' : ''}`}
                     onClick={toggleListening}
-                    disabled={isTyping || isSpeaking}
-                    title={isListening ? 'Stop listening' : 'Use microphone'}
+                    disabled={isTyping || isSpeaking || isTranscribing}
+                    title={isListening ? 'Stop and transcribe' : 'Record answer'}
                   >
                     {isListening ? <StopIcon /> : <MicIcon />}
                   </button>
                   <button
                     type="submit"
                     className={`action-icon-btn send ${inputText.trim() ? 'active' : ''}`}
-                    disabled={!inputText.trim() || isTyping || isSpeaking}
+                    disabled={!inputText.trim() || isTyping || isSpeaking || isTranscribing}
                     title="Send message"
                   >
                     <SendIcon />
@@ -699,7 +713,7 @@ const Interview = ({ onInterviewEnd }) => {
           <span>Chat</span>
         </button>
         <button 
-          className={`tab-item ${activePanel === 'code' ? 'active' : ''}`}
+          className={`tab-item tour-code-tab ${activePanel === 'code' ? 'active' : ''}`}
           onClick={() => setActivePanel('code')}
         >
           <CodeIcon />
@@ -711,12 +725,7 @@ const Interview = ({ onInterviewEnd }) => {
       {scorecard && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h2>Interview Results 📊</h2>
-            <p><strong>Technical Score:</strong> {scorecard.technical_score}/10</p>
-            <p><strong>Communication:</strong> {scorecard.communication_score}/10</p>
-            <hr style={{ margin: '1.5rem 0', borderColor: 'var(--border-color)', opacity: 0.2 }} />
-            <p><strong>Feedback:</strong> {scorecard.feedback}</p>
-            <p><strong>Study This:</strong> {scorecard.improvement}</p>
+            <Scorecard scorecard={scorecard} />
             <button onClick={() => setScorecard(null)} className="modal-close-btn">Close</button>
           </div>
         </div>

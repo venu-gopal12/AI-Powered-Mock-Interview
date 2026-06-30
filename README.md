@@ -1,76 +1,199 @@
-# 🚀 AI-Powered Mock Interview Platform 
-**An Adaptive, Full-Stack Interview Simulator with RAG, Live Code Execution, and Voice-to-Voice**
+# AI Mock Interviewer
 
-![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
-![NodeJS](https://img.shields.io/badge/node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white)
-![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
-![Groq](https://img.shields.io/badge/Groq-f55036?style=for-the-badge&logo=groq&logoColor=white)
+An AI-powered mock interview platform for software-engineering candidates. It
+uses a candidate's resume and interview preferences to run an adaptive
+interview, accept text or spoken answers, and produce an evidence-based
+scorecard with a focused practice plan.
 
-## 📌 Overview
-I built this platform to bridge the gap between solving algorithmic problems and verbally communicating solutions. 
+## Features
 
-Unlike simple chatbots, this platform uses an **Adaptive Single-Agent architecture**. Instead of slow multi-agent routing, it utilizes a sophisticated system prompt that allows the AI to dynamically adjust its tone: staying strict and technical when you're doing well, but automatically shifting to a supportive "HR" tone with hints if it detects you are struggling. This cut latency in half while creating a more natural conversation flow.
+- Configurable target role, experience level, duration, interview style, and
+  topic focus
+- Adaptive interview phases: introduction, project deep dive, technical,
+  problem solving, and closing
+- PDF resume upload for context-aware questions
+- Text answers and microphone recording with editable transcription
+- One-sentence hints that are excluded from the interview history and grading
+- Optional Monaco code-editor attachments
+- Technical and communication scorecards with strengths, gaps, evidence, and
+  recommended practice questions
+- Local performance dashboard and read-only review of previous interviews
+- Automatic recovery of an active interview after a page refresh
+- Guided product tour and responsive light/dark interface
 
-## ✨ Key Features
+> [!NOTE]
+> The code editor is a scratchpad: submitted code is attached as text and is
+> never executed. Resume text is passed directly to the model as delimited,
+> untrusted context; this project does not use a vector database or RAG.
 
-* **🤖 Adaptive AI Persona:** A unified "Senior Engineer" agent that balances technical grilling with human-like support based on real-time candidate performance.
-* **📄 RAG-Powered Context Injection:** High-performance PDF parsing extracts resume data and injects it directly into the LLM's context window for project-specific questioning.
-* **💻 Smart Code Sandbox:** Integrated Monaco Editor with an **explicit opt-in toggle**. Users can use the sandbox as a scratchpad and only "attach" their solution to the message when ready.
-* **🎤 Heuristic Voice Selection:** Implemented a smart voice-picking system that uses language/name heuristics (e.g., David/Samantha) to ensure high-quality, persona-appropriate speech synthesis.
-* **📊 Robust Analytics:** A specialized grading agent generates structured JSON scorecards. We implemented custom bracket-finding logic to ensure perfect parsing even when the LLM is "chatty."
-* **⚡ Production-Grade Guardrails:** Server-side history guards (`MAX_HISTORY_CHARS`) and payload limits protect against context window overflows and malicious inputs.
-* **💾 Performance-Optimized Storage:** Uses a "Scorecard-Only" storage strategy for past sessions. This preserves analytics history without bloating `localStorage` with massive message arrays.
+## Tech stack
 
-## 🏗️ System Architecture
+| Layer | Technologies |
+| --- | --- |
+| Frontend | React 19, Vite, Axios |
+| Interface | Monaco Editor, React Markdown, Recharts, Lucide, React Joyride |
+| Backend | Node.js, Express 5 |
+| AI | LangChain, Groq Llama 3.3 70B |
+| Speech | Groq Whisper Large V3 Turbo |
+| Files | Multer, `pdf-parse` |
+| Tests | Node.js test runner, Vitest, Testing Library |
 
-1. **Frontend:** React.js, Monaco Editor, Recharts, React-Markdown, React-Joyride (Interactive Onboarding).
-2. **Backend:** Node.js, Express, Multer (Secure PDF handling), PDF-Parse.
-3. **AI Layer:** LangChain.js orchestrating Groq API (Llama-3.3-70B) for ultra-low latency inference (< 500ms).
+## How it works
 
-## 🛠️ Technical Problem Solving
+1. The candidate configures the interview and optionally uploads a PDF resume.
+2. The Express API extracts up to 10,000 characters of resume text.
+3. A single AI interviewer selects questions and adjusts the topic and
+   difficulty while tracking interview progress.
+4. The candidate answers with text, speech, or an optional code attachment.
+5. On completion, the API generates a normalized scorecard and interview title.
+6. The browser stores a compact copy for review and performance analytics.
 
-Building this platform required solving several real-world AI engineering challenges:
-* **Latency Optimization:** Switched from a router-based multi-agent system to a single adaptive persona, reducing API round-trips by 50%.
-* **Memory Management:** Implemented history truncation (Defence-in-Depth) on both client and server to stay within LLM token limits (128k context window).
-* **Data Integrity:** Developed a robust JSON extraction system to handle malformed LLM outputs, ensuring the analytics dashboard never crashes.
-* **Voice UX:** Solved the "brittle voice index" problem by building a language-aware filter for the browser's Web Speech API.
-
-## 🚀 Run it Locally
+## Getting started
 
 ### Prerequisites
-* Node.js (v18+)
-* Groq API Key (Free)
 
-### 1. Clone the repository
+- Node.js 20 or newer
+- npm
+- A [Groq API key](https://console.groq.com/keys)
+
+### Installation
+
 ```bash
-git clone https://github.com/yourusername/ai-mock-interviewer.git
+git clone <your-repository-url>
 cd ai-mock-interviewer
-```
-
-### 2. Setup the Backend
-```bash
-# Install dependencies
 npm install
-
-# Create a .env file
-touch .env
-```
-Add your `GROQ_API_KEY` to the `.env` file. Then start the server:
-```bash
-node server.js
+npm --prefix client install
 ```
 
-### 3. Setup the Frontend
+Create the server environment file:
+
 ```bash
-cd client
-npm install
+# macOS/Linux
+cp .env.example .env
+
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+Add your Groq API key to `.env`:
+
+```dotenv
+GROQ_API_KEY=your_groq_api_key
+```
+
+### Run locally
+
+Start the API from the project root:
+
+```bash
 npm start
 ```
 
-## 🧠 Future Roadmap
-- [ ] **Real-time Streaming:** Implement Socket.io for token-by-token response streaming.
-- [ ] **Code Execution:** Integrate a remote execution API (like Piston) to run and test user solutions against real cases.
-- [ ] **Database Expansion:** Re-integrate MongoDB for multi-device sync once user auth (Clerk/JWT) is added.
+In a second terminal, start the frontend:
 
----
-*Built with ❤️ for developers preparing for their next big role.*
+```bash
+npm --prefix client run dev
+```
+
+Open `http://localhost:5173`. The API runs on
+`http://localhost:5000` by default, and `GET /health` can be used as a health
+check.
+
+## Environment variables
+
+### Server (`.env`)
+
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `GROQ_API_KEY` | Yes | — | Groq key used for interviewing, grading, and transcription |
+| `PORT` | No | `5000` | Express server port |
+| `ALLOWED_ORIGINS` | No | `http://localhost:5173` | Comma-separated exact CORS origins |
+| `AI_TIMEOUT_MS` | No | `40000` | Timeout for AI requests |
+| `RATE_LIMIT_WINDOW_MS` | No | `60000` | Rate-limit window per IP/session |
+| `RATE_LIMIT_MAX` | No | `30` | Maximum requests during one rate-limit window |
+
+### Client
+
+Set this when the API is hosted somewhere other than
+`http://localhost:5000`:
+
+```dotenv
+VITE_API_URL=https://api.example.com
+```
+
+Vite reads client variables at build time. Put the value in `client/.env` for
+local development or configure it in the frontend deployment environment.
+
+## API endpoints
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Check API availability |
+| `POST` | `/upload-resume` | Validate and extract text from one PDF resume |
+| `POST` | `/transcribe` | Transcribe a supported audio recording |
+| `POST` | `/interview` | Submit an answer and receive the next question |
+| `POST` | `/hint` | Generate a hint for the current question |
+| `POST` | `/end-interview` | Generate the scorecard and interview title |
+
+Resume uploads are limited to 5 MB. Audio uploads are limited to 10 MB and
+support WebM, Ogg, WAV, MP3, and MP4 when the file signature matches its MIME
+type.
+
+## Available scripts
+
+From the project root:
+
+```bash
+npm start                    # Start the Express API
+npm test                     # Run backend tests
+npm --prefix client run dev  # Start the Vite development server
+npm --prefix client test     # Run frontend tests once
+npm --prefix client run build # Create a production frontend build
+```
+
+## Project structure
+
+```text
+.
+├── agent.js                 # Interview, hint, title, and grading prompts
+├── server.js                # Express API and upload handling
+├── transcription.js        # Groq Whisper integration
+├── validation.js           # Request and scorecard validation
+├── rateLimit.js             # In-memory request limiter
+├── test/                    # Backend tests
+└── client/
+    ├── src/
+    │   ├── App.jsx          # Navigation and saved-session review
+    │   ├── Interview.jsx    # Main interview experience
+    │   ├── Scorecard.jsx    # Interview results
+    │   ├── Dashboard.jsx    # Local performance analytics
+    │   └── sessionStorage.js
+    └── vite.config.js
+```
+
+## Security and data handling
+
+- Uploaded files are held in memory and are not intentionally persisted by the
+  server.
+- The API validates request shapes, upload sizes, MIME types, and file
+  signatures.
+- Resume content is clearly delimited as untrusted model context.
+- Hints are removed from interview context and grading.
+- Conversation length and model-generated scorecard content are bounded.
+- CORS, per-IP/session rate limiting, and request timeouts are configurable.
+- Up to 30 compact completed sessions are stored in the browser's
+  `localStorage`; there is no account system or server-side session database.
+
+Before exposing the app publicly, add authentication, durable storage,
+distributed rate limiting, monitoring, and an explicit resume and interview
+data-retention policy.
+
+## Current limitations
+
+- Browser speech recording requires `MediaRecorder` support, microphone
+  permission, and a supported audio format.
+- Interview responses use request/response calls rather than token streaming.
+- Sessions do not sync across browsers or devices.
+- AI-generated grading is practice feedback, not an objective hiring decision.
+- The production frontend bundle would benefit from lazy loading Monaco and
+  charting components.

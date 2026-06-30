@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Interview from './Interview';
 import Dashboard from './Dashboard'; 
+import { clearActiveSession, hasActiveSession, loadJson } from './sessionStorage';
+import Scorecard from './Scorecard';
 import './App.css';
 
 
@@ -10,6 +12,7 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState('NEW'); // 'NEW', 'DASHBOARD', or a mongo _id
   const [viewingPastChat, setViewingPastChat] = useState(null); 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Sidebar closed by default
+  const [interviewKey, setInterviewKey] = useState(0);
 
   useEffect(() => {
     fetchSidebar();
@@ -17,12 +20,7 @@ function App() {
 
   const fetchSidebar = () => {
     try {
-      const saved = localStorage.getItem('savedSessions');
-      if (saved) {
-        setSessions(JSON.parse(saved).reverse()); // Newest first
-      } else {
-        setSessions([]);
-      }
+      setSessions([...loadJson('savedSessions', [])].reverse());
     } catch (error) {
       console.error("Sidebar fetch failed", error);
     }
@@ -43,6 +41,9 @@ function App() {
   };
 
   const startNewInterview = () => {
+    if (hasActiveSession() && !window.confirm('Start a new interview? The current conversation will be cleared.')) return;
+    clearActiveSession();
+    setInterviewKey((key) => key + 1);
     setActiveSessionId('NEW');
     setViewingPastChat(null);
     fetchSidebar(); 
@@ -119,7 +120,7 @@ function App() {
           )}
         </button>
         {activeSessionId === 'NEW' ? (
-          <Interview onInterviewEnd={fetchSidebar} /> 
+          <Interview key={interviewKey} onInterviewEnd={fetchSidebar} /> 
         ) : activeSessionId === 'DASHBOARD' ? (
           <Dashboard />
         ) : (
@@ -131,13 +132,7 @@ function App() {
               {/* Scorecard Summary in Read-Only View */}
               {viewingPastChat?.scorecard && (
                 <div style={{ backgroundColor: 'var(--input-bg)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid var(--border-color)', marginBottom: '2rem' }}>
-                  <h3 style={{ marginTop: 0 }}>Results</h3>
-                  <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem' }}>
-                    <div><strong>Tech Score:</strong> {viewingPastChat.scorecard.technical_score}/10</div>
-                    <div><strong>Comm Score:</strong> {viewingPastChat.scorecard.communication_score}/10</div>
-                  </div>
-                  <p><strong>Feedback:</strong> {viewingPastChat.scorecard.feedback}</p>
-                  <p style={{ marginBottom: 0 }}><strong>Improvement:</strong> {viewingPastChat.scorecard.improvement}</p>
+                  <Scorecard scorecard={viewingPastChat.scorecard} />
                 </div>
               )}
 

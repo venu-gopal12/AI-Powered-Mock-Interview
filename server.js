@@ -2,139 +2,225 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const pdf = require('pdf-parse');
-const { runInterviewAgent, generateHint, generateScorecard, generateTitle } = require('./agent');
+const agent = require('./agent');
+const transcription = require('./transcription');
+const { createRateLimiter } = require('./rateLimit');
+const {
+  validateHistory,
+  validateInterviewBody,
+  normalizeScorecard,
+} = require('./validation');
 require('dotenv').config();
 
-const app = express();
 const PORT = process.env.PORT || 5000;
-
-// ─── Limits ───────────────────────────────────────────────────────────────────
-
-// Max characters of history accepted per request (~30k chars ≈ ~7k tokens).
-// Prevents a buggy or malicious client from sending a massive payload straight
-// to the LLM.
 const MAX_HISTORY_CHARS = 30_000;
 
-// Max resume size: 5MB (multer default is no limit — that's dangerous)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 2 },
 });
 
-// ─── Middleware ───────────────────────────────────────────────────────────────
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 1 },
+});
 
-app.use(cors());
-app.use(express.json({ limit: '2mb' })); // prevent oversized JSON payloads too
+const AUDIO_MIME_TYPES = new Set([
+  'audio/webm',
+  'audio/ogg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/mpeg',
+  'audio/mp4',
+]);
 
-// ─── Guards ───────────────────────────────────────────────────────────────────
+function hasAudioSignature(buffer, mimetype) {
+  if (mimetype === 'audio/webm') {
+    return buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+  }
+  if (mimetype === 'audio/ogg') return buffer.subarray(0, 4).toString() === 'OggS';
+  if (mimetype === 'audio/wav' || mimetype === 'audio/x-wav') {
+    return buffer.subarray(0, 4).toString() === 'RIFF';
+  }
+  if (mimetype === 'audio/mpeg') {
+    return buffer.subarray(0, 3).toString() === 'ID3' || buffer[0] === 0xff;
+  }
+  if (mimetype === 'audio/mp4') return buffer.subarray(4, 8).toString() === 'ftyp';
+  return false;
+}
 
-/**
- * Serialize history to a string and truncate if it exceeds MAX_HISTORY_CHARS.
- * Trims from the front (oldest messages) to preserve recent context.
- */
 function guardHistory(history) {
-  if (!Array.isArray(history)) return [];
-
-  // Remove hint messages server-side as well (defence in depth)
-  const clean = history.filter((m) => m._isHint !== true);
-
-  let totalChars = clean.reduce((sum, m) => sum + (m.text?.length || 0), 0);
+  const clean = history.filter((message) => message._isHint !== true);
+  let totalChars = clean.reduce((sum, message) => sum + message.text.length, 0);
   while (totalChars > MAX_HISTORY_CHARS && clean.length > 2) {
-    const removed = clean.shift();
-    totalChars -= removed.text?.length || 0;
+    totalChars -= clean.shift().text.length;
   }
   return clean;
 }
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+function withTimeout(
+  promise,
+  timeoutMs = Number(process.env.AI_TIMEOUT_MS) || 40_000
+) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error('AI request timed out.');
+      error.code = 'AI_TIMEOUT';
+      reject(error);
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
-// 1. Resume upload
-app.post('/upload-resume', upload.single('resume'), async (req, res) => {
-  console.log('📥 Resume upload received');
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded.' });
+function allowedOrigins() {
+  return (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function createApp(dependencies = { ...agent, ...transcription }) {
+  const app = express();
+  const origins = allowedOrigins();
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1);
+  app.use(
+    cors({
+      origin(origin, callback) {
+        if (!origin || origins.includes(origin)) return callback(null, true);
+        return callback(new Error('Origin is not allowed by CORS.'));
+      },
+      methods: ['GET', 'POST'],
+      allowedHeaders: ['Content-Type', 'X-Session-ID'],
+    })
+  );
+  app.use(express.json({ limit: '2mb' }));
+  app.use(createRateLimiter({
+    windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60_000,
+    max: Number(process.env.RATE_LIMIT_MAX) || 30,
+  }));
+
+  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+  app.post('/transcribe', audioUpload.single('audio'), async (req, res, next) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No audio was uploaded.' });
+      const mimetype = req.file.mimetype.split(';')[0].toLowerCase();
+      if (!AUDIO_MIME_TYPES.has(mimetype) || !hasAudioSignature(req.file.buffer, mimetype)) {
+        return res.status(400).json({ error: 'Unsupported audio format.' });
+      }
+      const transcript = await withTimeout(
+        dependencies.transcribeAudio({
+          buffer: req.file.buffer,
+          filename: req.file.originalname || 'answer.webm',
+          mimetype,
+        })
+      );
+      if (!transcript) {
+        return res.status(422).json({ error: 'No speech was detected.' });
+      }
+      return res.json({ transcript });
+    } catch (error) {
+      return next(error);
     }
+  });
 
-    // FIX #10: Validate MIME type server-side, not just the browser's file picker
-    if (req.file.mimetype !== 'application/pdf') {
-      return res.status(400).json({ error: 'Only PDF files are accepted.' });
+  app.post('/upload-resume', upload.single('resume'), async (req, res, next) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+      const hasPdfSignature = req.file.buffer.subarray(0, 5).toString() === '%PDF-';
+      if (req.file.mimetype !== 'application/pdf' || !hasPdfSignature) {
+        return res.status(400).json({ error: 'Only valid PDF files are accepted.' });
+      }
+      const data = await withTimeout(pdf(req.file.buffer), 15_000);
+      return res.json({
+        message: 'Resume received. The interviewer is reading it now...',
+        resumeText: data.text.trim().slice(0, 10_000),
+      });
+    } catch (error) {
+      return next(error);
     }
+  });
 
-    console.log(`📄 Parsing: ${req.file.originalname} (${req.file.size} bytes)`);
-    const data = await pdf(req.file.buffer);
-    console.log(`✅ Parsed. Text length: ${data.text.length}`);
-
-    // Pass raw resume text to preserve all project details
-    // We slice to a reasonable length (10000 chars) to prevent massive payloads
-    const rawText = data.text.trim().slice(0, 10000);
-    console.log(`✅ Extracted raw text. Length: ${rawText.length}`);
-
-    res.json({
-      message: "Resume received. The interviewer is reading it now...",
-      resumeText: rawText,
-    });
-  } catch (error) {
-    console.error('🔥 PDF parse error:', error);
-    res.status(500).json({ error: 'Failed to parse PDF.', details: error.message });
-  }
-});
-
-// 2. Hint
-app.post('/hint', async (req, res) => {
-  try {
-    const history = guardHistory(req.body.history);
-    const hint = await generateHint(history);
-    console.log('💡 Hint generated');
-    res.json({ hint });
-  } catch (error) {
-    console.error('Hint error:', error);
-    res.status(500).json({ error: 'Could not generate hint.' });
-  }
-});
-
-// 3. End interview
-app.post('/end-interview', async (req, res) => {
-  try {
-    const history = guardHistory(req.body.history);
-
-    // Run scorecard and title generation in parallel
-    const [scorecardData, smartTitle] = await Promise.all([
-      generateScorecard(history),
-      generateTitle(history),
-    ]);
-
-    console.log('✅ Scorecard generated');
-    res.json({ scorecard: scorecardData, title: smartTitle });
-  } catch (error) {
-    console.error('End-interview error:', error);
-    res.status(500).json({ error: 'Could not generate session results.' });
-  }
-});
-
-// 4. Main interview endpoint
-// FIX #9: History is guarded before being passed to the LLM
-app.post('/interview', async (req, res) => {
-  try {
-    const { message, resumeContext } = req.body;
-    const history = guardHistory(req.body.history);
-
-    if (!message || typeof message !== 'string' || !message.trim()) {
-      return res.status(400).json({ error: 'Message is required.' });
+  app.post('/hint', async (req, res, next) => {
+    try {
+      const parsed = validateHistory(req.body?.history);
+      if (parsed.error) return res.status(400).json({ error: parsed.error });
+      const hint = await withTimeout(dependencies.generateHint(guardHistory(parsed.value)));
+      return res.json({ hint });
+    } catch (error) {
+      return next(error);
     }
+  });
 
-    console.log('User said:', message.slice(0, 80));
+  app.post('/end-interview', async (req, res, next) => {
+    try {
+      const parsed = validateHistory(req.body?.history);
+      if (parsed.error) return res.status(400).json({ error: parsed.error });
+      const history = guardHistory(parsed.value);
+      const [rawScorecard, rawTitle] = await withTimeout(
+        Promise.all([
+          dependencies.generateScorecard(history),
+          dependencies.generateTitle(history),
+        ])
+      );
+      const title =
+        typeof rawTitle === 'string' && rawTitle.trim()
+          ? rawTitle.replace(/[\r\n]/g, ' ').trim().slice(0, 80)
+          : 'Mock Interview';
+      return res.json({ scorecard: normalizeScorecard(rawScorecard, history), title });
+    } catch (error) {
+      return next(error);
+    }
+  });
 
-    const result = await runInterviewAgent(message, history, resumeContext || '');
-    res.json({ agent: result.agent, response: result.response });
-  } catch (error) {
-    console.error('Interview error:', error);
-    res.status(500).json({ error: 'Something went wrong with the AI.' });
-  }
-});
+  app.post('/interview', async (req, res, next) => {
+    try {
+      const parsed = validateInterviewBody(req.body);
+      if (parsed.error) return res.status(400).json({ error: parsed.error });
+      const { message, history, resumeContext, interviewConfig, interviewState } = parsed.value;
+      const result = await withTimeout(
+        dependencies.runInterviewAgent(
+          message,
+          guardHistory(history),
+          resumeContext,
+          interviewConfig,
+          interviewState
+        )
+      );
+      return res.json({
+        agent: result.agent,
+        response: result.response,
+        interviewState: result.interviewState,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
 
-// ─── Start ────────────────────────────────────────────────────────────────────
+  app.use((error, _req, res, _next) => {
+    if (error instanceof multer.MulterError) {
+      return res.status(400).json({ error: 'Invalid upload.', details: error.message });
+    }
+    if (error.message === 'Origin is not allowed by CORS.') {
+      return res.status(403).json({ error: error.message });
+    }
+    if (error.code === 'AI_TIMEOUT') {
+      return res.status(504).json({ error: 'The AI took too long to respond. Please retry.' });
+    }
+    console.error('Request failed:', error);
+    return res.status(500).json({ error: 'The request could not be completed.' });
+  });
+  return app;
+}
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  const server = createApp().listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+  server.requestTimeout = 50_000;
+  server.headersTimeout = 55_000;
+}
+
+module.exports = { createApp, guardHistory, hasAudioSignature, withTimeout };
