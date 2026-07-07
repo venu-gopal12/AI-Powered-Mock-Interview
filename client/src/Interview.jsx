@@ -479,7 +479,7 @@ const Interview = ({ onInterviewEnd }) => {
                     </label>
                     {[
                       ['level', 'Level', ['junior', 'mid', 'senior']],
-                      ['duration', 'Duration', [10, 20, 30]],
+                      ['duration', 'Duration', [20, 40, 60]],
                       ['style', 'Style', ['supportive', 'balanced', 'strict']],
                       ['focus', 'Focus', ['resume', 'frontend', 'backend', 'full-stack', 'behavioral']],
                     ].map(([key, label, options]) => (

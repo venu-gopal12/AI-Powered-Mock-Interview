@@ -98,6 +98,16 @@ body {
   overflow-x: hidden;
 }
 
+.local-storage-note {
+  color: #6b7280;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  margin: 12px 8px 0;
+  padding: 10px 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  white-space: normal;
+}
+
 /* Custom Scrollbar for Sidebar */
 .session-list::-webkit-scrollbar {
   width: 8px;

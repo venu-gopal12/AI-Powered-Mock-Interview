@@ -173,6 +173,8 @@ npm --prefix client run build # Create a production frontend build
 
 ## Security and data handling
 
+- The app is intentionally authentication-free so recruiters and visitors can
+  try the interview flow immediately without creating an account.
 - Uploaded files are held in memory and are not intentionally persisted by the
   server.
 - The API validates request shapes, upload sizes, MIME types, and file
@@ -181,12 +183,15 @@ npm --prefix client run build # Create a production frontend build
 - Hints are removed from interview context and grading.
 - Conversation length and model-generated scorecard content are bounded.
 - CORS, per-IP/session rate limiting, and request timeouts are configurable.
-- Up to 30 compact completed sessions are stored in the browser's
-  `localStorage`; there is no account system or server-side session database.
+- Active interview state and up to 30 compact completed sessions are stored in
+  the browser's `localStorage`; there is no account system or server-side
+  session database.
+- The anonymous `X-Session-ID` request header is used only for rate limiting,
+  not authentication or cross-device sync.
 
-Before exposing the app publicly, add authentication, durable storage,
-distributed rate limiting, monitoring, and an explicit resume and interview
-data-retention policy.
+Before turning this demo into a production product, add authentication, durable
+storage, distributed rate limiting, monitoring, and an explicit resume and
+interview data-retention policy.
 
 ## Current limitations
 

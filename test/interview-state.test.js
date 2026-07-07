@@ -8,9 +8,9 @@ const {
 const { validateInterviewConfig, validateInterviewState } = require('../validation');
 
 test('maps interview duration to a bounded question plan', () => {
-  assert.equal(targetQuestions(10), 4);
-  assert.equal(targetQuestions(20), 7);
-  assert.equal(targetQuestions(30), 10);
+  assert.equal(targetQuestions(20), 8);
+  assert.equal(targetQuestions(40), 16);
+  assert.equal(targetQuestions(60), 22);
 });
 
 test('progresses through realistic interview phases', () => {

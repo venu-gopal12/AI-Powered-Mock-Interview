@@ -9,7 +9,7 @@ const ALLOWED_SENDERS = new Set([
   'system',
 ]);
 const LEVELS = new Set(['junior', 'mid', 'senior']);
-const DURATIONS = new Set([10, 20, 30]);
+const DURATIONS = new Set([20, 40, 60]);
 const STYLES = new Set(['supportive', 'balanced', 'strict']);
 const FOCUSES = new Set(['resume', 'frontend', 'backend', 'full-stack', 'behavioral']);
 const PHASES = new Set(['introduction', 'project_deep_dive', 'technical', 'problem_solving', 'closing']);

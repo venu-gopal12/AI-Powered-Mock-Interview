@@ -88,6 +88,9 @@ function App() {
             </div>
           ))}
         </div>
+        <p className="local-storage-note">
+          No login required. Interview history is stored only in this browser.
+        </p>
       </div>
 
       {/* RIGHT MAIN AREA */}

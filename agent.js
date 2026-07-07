@@ -60,7 +60,9 @@ function formatHistory(history) {
  * based on context, cutting latency in half vs. the router approach.
  */
 function targetQuestions(duration) {
-  return duration === 10 ? 4 : duration === 30 ? 10 : 7;
+  if (duration === 40) return 16;
+  if (duration === 60) return 22;
+  return 8;
 }
 
 function phaseForProgress(answered, target) {
