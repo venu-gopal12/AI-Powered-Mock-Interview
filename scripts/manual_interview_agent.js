@@ -1,4 +1,4 @@
-const { runInterviewAgent } = require("./agent");
+const { runInterviewAgent } = require("../agent");
 
 async function test() {
   console.log("Testing Tech Lead trigger...");

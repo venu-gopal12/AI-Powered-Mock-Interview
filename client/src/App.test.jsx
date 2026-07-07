@@ -2,10 +2,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import App from './App';
 
-vi.mock('./Interview', () => ({
+vi.mock('./pages/Interview', () => ({
   default: () => <div>Interview workspace</div>,
 }));
-vi.mock('./Dashboard', () => ({
+vi.mock('./pages/Dashboard', () => ({
   default: () => <div>Analytics view</div>,
 }));
 

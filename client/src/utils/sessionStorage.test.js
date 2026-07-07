@@ -37,7 +37,7 @@ describe('session storage', () => {
   it('clears only the active interview', () => {
     localStorage.setItem('interviewMessages', JSON.stringify([{ text: 'hello' }]));
     localStorage.setItem('interviewResumeContext', 'resume');
-    localStorage.setItem('interviewConfig', '{"duration":30}');
+    localStorage.setItem('interviewConfig', '{"duration":40}');
     localStorage.setItem('interviewState', '{"phase":"technical"}');
     localStorage.setItem('savedSessions', '[]');
     expect(hasActiveSession()).toBe(true);

@@ -1,4 +1,4 @@
-const { generateResumeSummary } = require('./agent.js');
+const { generateResumeSummary } = require('../agent.js');
 
 const dummyResume = `
 Jane Doe

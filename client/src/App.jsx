@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import Interview from './Interview';
-import Dashboard from './Dashboard'; 
-import { clearActiveSession, hasActiveSession, loadJson } from './sessionStorage';
-import Scorecard from './Scorecard';
+import Interview from './pages/Interview';
+import Dashboard from './pages/Dashboard'; 
+import { clearActiveSession, hasActiveSession, loadJson } from './utils/sessionStorage';
+import Scorecard from './components/Scorecard';
 import './App.css';
 
 

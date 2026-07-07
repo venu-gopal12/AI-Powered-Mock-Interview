@@ -93,7 +93,7 @@ test('passes prior history once and the current answer separately', async (t) =>
     interviewConfig: {
       role: 'Backend Engineer',
       level: 'mid',
-      duration: 30,
+      duration: 40,
       style: 'strict',
       focus: 'backend',
     },
@@ -110,7 +110,7 @@ test('passes prior history once and the current answer separately', async (t) =>
   assert.equal(calls[0][0], 'A function retaining lexical scope.');
   assert.deepEqual(calls[0][1], history);
   assert.equal(calls[0][3].role, 'Backend Engineer');
-  assert.equal(calls[0][3].duration, 30);
+  assert.equal(calls[0][3].duration, 40);
   assert.equal(calls[0][4].current_topic, 'Closures');
 });
 

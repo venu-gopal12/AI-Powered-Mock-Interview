@@ -157,17 +157,19 @@ npm --prefix client run build # Create a production frontend build
 .
 ├── agent.js                 # Interview, hint, title, and grading prompts
 ├── server.js                # Express API and upload handling
-├── transcription.js        # Groq Whisper integration
+├── transcription.js         # Groq Whisper integration
 ├── validation.js           # Request and scorecard validation
 ├── rateLimit.js             # In-memory request limiter
+├── scripts/                 # Manual debugging and experimentation scripts
 ├── test/                    # Backend tests
 └── client/
     ├── src/
-    │   ├── App.jsx          # Navigation and saved-session review
-    │   ├── Interview.jsx    # Main interview experience
-    │   ├── Scorecard.jsx    # Interview results
-    │   ├── Dashboard.jsx    # Local performance analytics
-    │   └── sessionStorage.js
+    │   ├── api/             # Axios client and frontend API config
+    │   ├── components/      # Reusable UI such as scorecards
+    │   ├── hooks/           # Custom React hooks
+    │   ├── pages/           # Interview and dashboard screens
+    │   ├── utils/           # Local storage and tour helpers
+    │   └── App.jsx          # Navigation and saved-session review
     └── vite.config.js
 ```
 
