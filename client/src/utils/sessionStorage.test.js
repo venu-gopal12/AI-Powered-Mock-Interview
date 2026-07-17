@@ -8,6 +8,7 @@ import {
 } from './sessionStorage';
 
 describe('session storage', () => {
+  // localStorage is the app's persistence layer, so each test starts clean.
   beforeEach(() => localStorage.clear());
 
   it('recovers safely from malformed JSON', () => {

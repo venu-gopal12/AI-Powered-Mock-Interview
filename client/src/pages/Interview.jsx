@@ -8,6 +8,7 @@ import { Joyride } from 'react-joyride';
 import './Interview.css';
 import useInterviewSpeech from '../hooks/useInterviewSpeech';
 import { clearActiveSession, loadJson, saveCompletedSession } from '../utils/sessionStorage';
+import { createInitialInterviewState, targetQuestions } from '../utils/interviewPlan';
 import Scorecard from '../components/Scorecard';
 import {
   DESKTOP_TOUR_STEPS,
@@ -15,6 +16,7 @@ import {
   hasCompletedTour,
 } from '../utils/interviewTour';
 
+// Inline icon components keep this file self-contained for simple controls.
 const UploadIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
 const MicIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>;
 const SendIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
@@ -28,23 +30,19 @@ const CodeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height
 const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>;
 
 const DEFAULT_CONFIG = {
+  // Default interview setup used for brand-new sessions and invalid saved data.
   role: 'Full-Stack Developer',
   level: 'junior',
   duration: 20,
   style: 'balanced',
   focus: 'resume',
 };
-const DEFAULT_INTERVIEW_STATE = {
-  phase: 'introduction',
-  current_topic: '',
-  difficulty: 1,
-  follow_ups_on_topic: 0,
-  questions_answered: 0,
-  target_questions: 7,
-};
+const DEFAULT_INTERVIEW_STATE = createInitialInterviewState(DEFAULT_CONFIG.duration);
 
 // ─── Voice selection: match by language, not fragile index ───────────────────
 const Interview = ({ onInterviewEnd }) => {
+  // Messages and setup are restored from localStorage so refreshes do not lose
+  // an active interview.
   const [messages, setMessages] = useState(() => loadJson('interviewMessages', []));
 
   const [resumeContext, setResumeContext] = useState(() => {
@@ -64,9 +62,16 @@ const Interview = ({ onInterviewEnd }) => {
   const [interviewConfig, setInterviewConfig] = useState(() =>
     loadJson('interviewConfig', DEFAULT_CONFIG)
   );
-  const [interviewState, setInterviewState] = useState(() =>
-    loadJson('interviewState', DEFAULT_INTERVIEW_STATE)
-  );
+  const [interviewState, setInterviewState] = useState(() => {
+    const savedConfig = loadJson('interviewConfig', DEFAULT_CONFIG);
+    const savedState = loadJson('interviewState', DEFAULT_INTERVIEW_STATE);
+    const expectedTarget = targetQuestions(savedConfig.duration);
+    return {
+      ...createInitialInterviewState(savedConfig.duration),
+      ...savedState,
+      target_questions: expectedTarget,
+    };
+  });
   
   // FIX #4: Tour should only be marked complete AFTER the user finishes/skips it,
   // not the moment it starts. Removed the premature localStorage.setItem effect.
@@ -74,6 +79,8 @@ const Interview = ({ onInterviewEnd }) => {
     return !localStorage.getItem('interviewTourCompleted');
   });
 
+  // Refs mirror state values for async handlers that need the latest value
+  // after an awaited API request returns.
   const messagesRef = useRef(messages);
   const resumeContextRef = useRef(resumeContext);
   const interviewConfigRef = useRef(interviewConfig);
@@ -88,11 +95,13 @@ const Interview = ({ onInterviewEnd }) => {
     speak,
     stopSpeaking,
   } = useInterviewSpeech((transcript) => {
+    // Spoken answers feed into the same textarea as typed answers.
     setInputText((current) => current ? `${current.trim()} ${transcript}` : transcript);
     requestAnimationFrame(() => textareaRef.current?.focus());
   });
 
   const handleJoyrideCallback = (data) => {
+    // Finish/skip completes onboarding; closing only pauses it.
     if (hasCompletedTour(data.status)) {
       localStorage.setItem('interviewTourCompleted', 'true');
       setRunTour(false);
@@ -103,13 +112,14 @@ const Interview = ({ onInterviewEnd }) => {
   };
 
   const startTour = () => {
+    // Clear the flag so the guided tour can be replayed from the header.
     localStorage.removeItem('interviewTourCompleted');
     setIsMobileMenuOpen(false);
     setActivePanel('chat');
     setRunTour(true);
   };
 
-  // Persist messages (needed for resume-in-progress recovery)
+  // Persist messages for resume-in-progress recovery.
   useEffect(() => {
     messagesRef.current = messages;
     try {
@@ -120,16 +130,28 @@ const Interview = ({ onInterviewEnd }) => {
   }, [messages]);
 
   useEffect(() => {
+    // Store both state and ref copies so reload recovery and async handlers see
+    // the same resume text.
     resumeContextRef.current = resumeContext;
     localStorage.setItem('interviewResumeContext', resumeContext);
   }, [resumeContext]);
 
   useEffect(() => {
+    // Persist the selected interview setup before the first message is sent.
     interviewConfigRef.current = interviewConfig;
     localStorage.setItem('interviewConfig', JSON.stringify(interviewConfig));
+    setInterviewState((current) => {
+      const next = {
+        ...current,
+        target_questions: targetQuestions(interviewConfig.duration),
+      };
+      interviewStateRef.current = next;
+      return next;
+    });
   }, [interviewConfig]);
 
   useEffect(() => {
+    // Persist progress metadata returned by the server after each answer.
     interviewStateRef.current = interviewState;
     localStorage.setItem('interviewState', JSON.stringify(interviewState));
   }, [interviewState]);
@@ -143,10 +165,13 @@ const Interview = ({ onInterviewEnd }) => {
   }, [isMobileMenuOpen]);
 
   useEffect(() => {
+    // Keep the newest AI/user message visible as the transcript grows.
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
   useEffect(() => {
+    // Track viewport changes because tour targets and panel layout differ on
+    // mobile screens.
     if (!window.matchMedia) return undefined;
     const media = window.matchMedia('(max-width: 768px)');
     const updateViewport = (event) => setIsMobile(event.matches);
@@ -156,6 +181,7 @@ const Interview = ({ onInterviewEnd }) => {
   }, []);
 
   useLayoutEffect(() => {
+    // Resize before paint so typing a multi-line answer does not flicker.
     const textarea = textareaRef.current;
     if (!textarea) return;
 
@@ -179,10 +205,10 @@ const Interview = ({ onInterviewEnd }) => {
     if (!inputText.trim() || isTyping || isSpeaking || isTranscribing) return;
 
     let finalMessage = inputText;
-    // Only attach code if the user explicitly checked "attach code"
+    // Only attach code if the user explicitly checked "attach code".
     if (attachCode && code.trim() !== '' && code !== '// Write your solution here...\n') {
       finalMessage += `\n\nHere is my code in ${language}:\n\`\`\`${language}\n${code}\n\`\`\``;
-      // Clear editor and toggle after sending so it doesn't carry over
+      // Clear editor and toggle after sending so it does not carry over.
       setCode('// Write your solution here...\n');
       setAttachCode(false);
     }
@@ -194,6 +220,8 @@ const Interview = ({ onInterviewEnd }) => {
   const handleUserMessage = async (text) => {
     if (window.speechSynthesis?.speaking) stopSpeaking();
 
+    // Optimistically show the answer, but send the previous transcript
+    // separately because the server treats `message` as the current turn.
     const newMsg = { sender: 'user', text: text.trim() };
     const previousHistory = messagesRef.current;
     const newHistory = [...previousHistory, newMsg];
@@ -211,6 +239,7 @@ const Interview = ({ onInterviewEnd }) => {
       });
       const { response, interviewState: nextInterviewState } = res.data;
       if (nextInterviewState) {
+        // Server-returned state is authoritative after every model turn.
         interviewStateRef.current = nextInterviewState;
         setInterviewState(nextInterviewState);
       }
@@ -222,7 +251,7 @@ const Interview = ({ onInterviewEnd }) => {
         return next;
       });
       
-      // Nudge logic: simple heuristic to see if AI asked for code
+      // Nudge logic: simple heuristic to see if the AI asked for code.
       const lowerResponse = response.toLowerCase();
       if (lowerResponse.includes('code') || lowerResponse.includes('function') || lowerResponse.includes('program')) {
         setShowCodeNudge(true);
@@ -255,6 +284,7 @@ const Interview = ({ onInterviewEnd }) => {
     setActivePanel('chat');
     setInterviewConfig(DEFAULT_CONFIG);
     setInterviewState(DEFAULT_INTERVIEW_STATE);
+    // Reset refs alongside React state because async handlers read from refs.
     interviewConfigRef.current = DEFAULT_CONFIG;
     interviewStateRef.current = DEFAULT_INTERVIEW_STATE;
     messagesRef.current = [];
@@ -268,7 +298,8 @@ const Interview = ({ onInterviewEnd }) => {
       const res = await api.post('/hint', { history: messagesRef.current });
       const hintText = res.data.hint;
       setIsTyping(false);
-      // FIX: mark hint messages so agent.js can filter them out of history
+      // Mark hint messages so the backend can filter them out of interview
+      // context and grading while still showing the hint in the transcript.
       setMessages((prev) => [...prev, { sender: 'HR_WHISPER', text: hintText, _isHint: true }]);
       speak(hintText, false);
     } catch {
@@ -289,6 +320,8 @@ const Interview = ({ onInterviewEnd }) => {
       const { scorecard: sc, title } = res.data;
       setScorecard(sc);
 
+      // Completed sessions are saved locally for the sidebar, dashboard, and
+      // read-only review screen.
       const newSession = {
         _id: Date.now().toString(),
         title: title || 'Mock Interview',
@@ -298,7 +331,7 @@ const Interview = ({ onInterviewEnd }) => {
       };
       saveCompletedSession(newSession);
 
-      // Clear active interview state
+      // Clear active interview state after saving the completed session.
       clearActiveSession();
 
       if (onInterviewEnd) onInterviewEnd();
@@ -313,7 +346,8 @@ const Interview = ({ onInterviewEnd }) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Server-side guard: only accept PDF by MIME type, not just browser hint
+    // Client-side guard gives quick feedback; server-side validation repeats
+    // stricter checks before parsing.
     if (file.type !== 'application/pdf') {
       alert('Please upload a PDF file.');
       event.target.value = '';
@@ -337,13 +371,16 @@ const Interview = ({ onInterviewEnd }) => {
     setIsTyping(true);
 
     try {
+      // Uploading a resume starts a fresh tailored interview, so progress resets
+      // once the text is extracted successfully.
       const res = await api.post('/upload-resume', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const { resumeText } = res.data;
       setResumeContext(resumeText);
-      setInterviewState(DEFAULT_INTERVIEW_STATE);
-      interviewStateRef.current = DEFAULT_INTERVIEW_STATE;
+      const initialState = createInitialInterviewState(interviewConfigRef.current.duration);
+      setInterviewState(initialState);
+      interviewStateRef.current = initialState;
       setIsTyping(false);
       const startMsg = `Thanks, I have your resume. We'll run a ${interviewConfigRef.current.duration}-minute ${interviewConfigRef.current.role} interview. To begin, please give me a concise introduction.`;
       setMessages([{ sender: 'INTERVIEWER', text: startMsg }]);
@@ -358,6 +395,7 @@ const Interview = ({ onInterviewEnd }) => {
   };
 
   // FIX #3: Avatar uses INTERVIEWER (the single agent) not TECH_LEAD/HR
+  // HR_WHISPER is the hint helper; all other AI messages are the interviewer.
   const getAvatar = (sender) => {
     if (sender === 'HR_WHISPER') return '🤫';
     if (sender === 'user') return null;
@@ -368,6 +406,8 @@ const Interview = ({ onInterviewEnd }) => {
     if (sender === 'HR_WHISPER') return 'hr';
     return 'tech';
   };
+
+  const progressTarget = interviewState.target_questions || targetQuestions(interviewConfig.duration);
 
   return (
     <div className="app-container theme-tech">
@@ -392,14 +432,14 @@ const Interview = ({ onInterviewEnd }) => {
           <div style={{ minWidth: 180, maxWidth: 280, flex: 1, margin: '0 1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
               <span>{String(interviewState.phase || 'introduction').replaceAll('_', ' ')}</span>
-              <span>{interviewState.questions_answered || 0}/{interviewState.target_questions || 7}</span>
+              <span>{interviewState.questions_answered || 0}/{progressTarget}</span>
             </div>
             <div style={{ height: 4, borderRadius: 4, background: 'var(--border-color)', marginTop: 4 }}>
               <div style={{
                 height: '100%',
                 borderRadius: 4,
                 background: '#10a37f',
-                width: `${Math.min(100, ((interviewState.questions_answered || 0) / (interviewState.target_questions || 7)) * 100)}%`,
+                width: `${Math.min(100, ((interviewState.questions_answered || 0) / progressTarget) * 100)}%`,
               }} />
             </div>
           </div>

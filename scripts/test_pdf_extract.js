@@ -4,6 +4,8 @@ const pdf = require('pdf-parse');
 const { generateResumeSummary } = require('../agent.js');
 
 async function test() {
+  // Manual PDF parsing helper. It expects a local test_resume.pdf file and the
+  // legacy generateResumeSummary export.
   const data = await pdf(fs.readFileSync(path.join(__dirname, '..', 'test_resume.pdf'))).catch(e => {
     console.log("PDF parse failed", e);
     return {text: ''};

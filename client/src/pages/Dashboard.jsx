@@ -3,6 +3,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { BarChart2, TrendingUp, MessageSquare, Award, AlertCircle, RefreshCw } from 'lucide-react';
 
 const Dashboard = () => {
+  // Dashboard reads completed sessions from localStorage; there is no backend
+  // analytics store in this app.
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -18,6 +20,8 @@ const Dashboard = () => {
       const saved = localStorage.getItem('savedSessions');
       const pastSessions = saved ? JSON.parse(saved) : [];
 
+      // Flatten each saved scorecard into the shape Recharts and feedback cards
+      // need, while tolerating older sessions with missing fields.
       const formattedData = pastSessions.map((s, index) => ({
         name: `Attempt ${index + 1}`,
         Tech: s.scorecard?.technical_score ?? 0,
@@ -117,6 +121,8 @@ const Dashboard = () => {
   const avgTech = (data.reduce((acc, cur) => acc + cur.Tech, 0) / data.length).toFixed(1);
   const avgComm = (data.reduce((acc, cur) => acc + cur.Comm, 0) / data.length).toFixed(1);
   const avgOverall = (data.reduce((acc, cur) => acc + cur.Overall, 0) / data.length).toFixed(1);
+  // Best technical score is highlighted because it is often the easiest growth
+  // signal for repeated mock interviews.
   const best = Math.max(...data.map((d) => d.Tech));
 
   return (

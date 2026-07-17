@@ -15,16 +15,22 @@ require('dotenv').config();
 const PORT = process.env.PORT || 5000;
 const MAX_HISTORY_CHARS = 30_000;
 
+// Resume uploads stay in memory because the app only needs to parse the PDF
+// once and never stores the original file on disk.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 2 },
 });
 
+// Voice answers can be larger than resumes, but are still bounded to prevent
+// accidental or abusive large uploads.
 const audioUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 1 },
 });
 
+// Only formats supported by the browser recorder / Groq transcription flow are
+// accepted. The signature check below prevents a fake MIME type from passing.
 const AUDIO_MIME_TYPES = new Set([
   'audio/webm',
   'audio/ogg',
@@ -49,8 +55,16 @@ function hasAudioSignature(buffer, mimetype) {
   return false;
 }
 
+function cleanHistory(history) {
+  // Hints are shown to the user, but must not become evidence for the
+  // interviewer or scorecard.
+  return history.filter((message) => message._isHint !== true);
+}
+
 function guardHistory(history) {
-  const clean = history.filter((message) => message._isHint !== true);
+  // Live interview calls only need recent context, so keep them bounded for
+  // latency and model-context safety.
+  const clean = cleanHistory(history);
   let totalChars = clean.reduce((sum, message) => sum + message.text.length, 0);
   while (totalChars > MAX_HISTORY_CHARS && clean.length > 2) {
     totalChars -= clean.shift().text.length;
@@ -62,6 +76,8 @@ function withTimeout(
   promise,
   timeoutMs = Number(process.env.AI_TIMEOUT_MS) || 40_000
 ) {
+  // AI providers can occasionally hang; routes wrap long-running calls so the
+  // client gets a clear 504 instead of waiting indefinitely.
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
@@ -74,6 +90,8 @@ function withTimeout(
 }
 
 function allowedOrigins() {
+  // Comma-separated origins make local dev and deployed frontends configurable
+  // without code changes.
   return (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
     .split(',')
     .map((origin) => origin.trim())
@@ -81,6 +99,8 @@ function allowedOrigins() {
 }
 
 function createApp(dependencies = { ...agent, ...transcription }) {
+  // Dependencies are injectable so tests can exercise HTTP behavior without
+  // making real AI or transcription requests.
   const app = express();
   const origins = allowedOrigins();
   app.disable('x-powered-by');
@@ -88,6 +108,7 @@ function createApp(dependencies = { ...agent, ...transcription }) {
   app.use(
     cors({
       origin(origin, callback) {
+        // Non-browser clients may omit Origin; browsers must match allowlist.
         if (!origin || origins.includes(origin)) return callback(null, true);
         return callback(new Error('Origin is not allowed by CORS.'));
       },
@@ -107,6 +128,8 @@ function createApp(dependencies = { ...agent, ...transcription }) {
     try {
       if (!req.file) return res.status(400).json({ error: 'No audio was uploaded.' });
       const mimetype = req.file.mimetype.split(';')[0].toLowerCase();
+      // Check both claimed type and binary signature before sending bytes to
+      // the transcription provider.
       if (!AUDIO_MIME_TYPES.has(mimetype) || !hasAudioSignature(req.file.buffer, mimetype)) {
         return res.status(400).json({ error: 'Unsupported audio format.' });
       }
@@ -130,6 +153,8 @@ function createApp(dependencies = { ...agent, ...transcription }) {
     try {
       if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
       const hasPdfSignature = req.file.buffer.subarray(0, 5).toString() === '%PDF-';
+      // Browser MIME types are not trustworthy by themselves, so require the
+      // PDF file header as well.
       if (req.file.mimetype !== 'application/pdf' || !hasPdfSignature) {
         return res.status(400).json({ error: 'Only valid PDF files are accepted.' });
       }
@@ -147,6 +172,8 @@ function createApp(dependencies = { ...agent, ...transcription }) {
     try {
       const parsed = validateHistory(req.body?.history);
       if (parsed.error) return res.status(400).json({ error: parsed.error });
+      // Hints use the same transcript context but remain outside the official
+      // interview history used for grading.
       const hint = await withTimeout(dependencies.generateHint(guardHistory(parsed.value)));
       return res.json({ hint });
     } catch (error) {
@@ -158,7 +185,9 @@ function createApp(dependencies = { ...agent, ...transcription }) {
     try {
       const parsed = validateHistory(req.body?.history);
       if (parsed.error) return res.status(400).json({ error: parsed.error });
-      const history = guardHistory(parsed.value);
+      const history = cleanHistory(parsed.value);
+      // Scorecard and title do not depend on each other, so they can run in
+      // parallel under the same timeout wrapper.
       const [rawScorecard, rawTitle] = await withTimeout(
         Promise.all([
           dependencies.generateScorecard(history),
@@ -180,6 +209,8 @@ function createApp(dependencies = { ...agent, ...transcription }) {
       const parsed = validateInterviewBody(req.body);
       if (parsed.error) return res.status(400).json({ error: parsed.error });
       const { message, history, resumeContext, interviewConfig, interviewState } = parsed.value;
+      // The server owns validation and context trimming so the AI prompt never
+      // receives unbounded client-supplied data.
       const result = await withTimeout(
         dependencies.runInterviewAgent(
           message,
@@ -200,6 +231,8 @@ function createApp(dependencies = { ...agent, ...transcription }) {
   });
 
   app.use((error, _req, res, _next) => {
+    // Keep client errors specific and hide unexpected internals behind a
+    // generic response while still logging details for developers.
     if (error instanceof multer.MulterError) {
       return res.status(400).json({ error: 'Invalid upload.', details: error.message });
     }
@@ -219,8 +252,16 @@ if (require.main === module) {
   const server = createApp().listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+  // Express defaults can outlive the AI timeout; align HTTP timeouts so stuck
+  // requests clean up promptly.
   server.requestTimeout = 50_000;
   server.headersTimeout = 55_000;
 }
 
-module.exports = { createApp, guardHistory, hasAudioSignature, withTimeout };
+module.exports = {
+  createApp,
+  cleanHistory,
+  guardHistory,
+  hasAudioSignature,
+  withTimeout,
+};

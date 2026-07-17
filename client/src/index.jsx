@@ -7,6 +7,7 @@ import reportWebVitals from './reportWebVitals';
 // --- ANONYMOUS SESSION SETUP ---
 let sessionId = localStorage.getItem('interviewSessionId');
 if (!sessionId) {
+  // The id is not a login token; it only groups requests for rate limiting.
   sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
   localStorage.setItem('interviewSessionId', sessionId);
 }
@@ -26,6 +27,8 @@ if (typeof window !== 'undefined' && window.ResizeObserver) {
   window.ResizeObserver = class ResizeObserver extends OriginalResizeObserver {
     constructor(callback) {
       super((entries, observer) => {
+        // Deferring callbacks to the next animation frame avoids noisy
+        // ResizeObserver loop errors from third-party layout components.
         window.requestAnimationFrame(() => {
           callback(entries, observer);
         });

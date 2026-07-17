@@ -2,6 +2,8 @@ import { render, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import Scorecard from './Scorecard';
 
+// Scorecard tests cover both the current detailed schema and older saved
+// sessions that only contain aggregate feedback strings.
 it('renders evidence and a targeted practice plan', () => {
   render(<Scorecard scorecard={{
     overall_score: 7,

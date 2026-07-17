@@ -6,4 +6,6 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
+// Remove mounted components between tests so local DOM state cannot leak from
+// one assertion to the next.
 afterEach(cleanup);

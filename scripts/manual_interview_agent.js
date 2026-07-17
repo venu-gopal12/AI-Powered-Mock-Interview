@@ -1,6 +1,8 @@
 const { runInterviewAgent } = require("../agent");
 
 async function test() {
+  // Manual smoke script for trying interviewer responses from the terminal.
+  // Requires GROQ_API_KEY and is not part of the automated test suite.
   console.log("Testing Tech Lead trigger...");
   const res1 = await runInterviewAgent("I will use a nested loop to sort this array.");
   console.log("Result:", res1);

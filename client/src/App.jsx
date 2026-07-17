@@ -8,6 +8,8 @@ import './App.css';
 
 
 function App() {
+  // This top-level component owns navigation between the active interview,
+  // analytics dashboard, and read-only saved interview review.
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState('NEW'); // 'NEW', 'DASHBOARD', or a mongo _id
   const [viewingPastChat, setViewingPastChat] = useState(null); 
@@ -20,6 +22,8 @@ function App() {
 
   const fetchSidebar = () => {
     try {
+      // Sessions are saved oldest-to-newest; reverse them so the sidebar shows
+      // the latest interview first.
       setSessions([...loadJson('savedSessions', [])].reverse());
     } catch (error) {
       console.error("Sidebar fetch failed", error);
@@ -29,6 +33,8 @@ function App() {
   const loadPastSession = (id) => {
     setActiveSessionId(id);
     try {
+      // Saved sessions live only in browser storage, so loading a past chat is a
+      // local lookup rather than an API request.
       const saved = localStorage.getItem('savedSessions');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -42,6 +48,7 @@ function App() {
 
   const startNewInterview = () => {
     if (hasActiveSession() && !window.confirm('Start a new interview? The current conversation will be cleared.')) return;
+    // Clear unfinished interview state while keeping completed saved sessions.
     clearActiveSession();
     setInterviewKey((key) => key + 1);
     setActiveSessionId('NEW');
@@ -50,6 +57,7 @@ function App() {
   };
 
   const showDashboard = () => {
+    // Dashboard is another local view fed by savedSessions in localStorage.
     setActiveSessionId('DASHBOARD');
     setViewingPastChat(null);
   }
@@ -123,6 +131,8 @@ function App() {
           )}
         </button>
         {activeSessionId === 'NEW' ? (
+          // Changing the key forces Interview to remount after "New Interview",
+          // resetting hook state that is not stored in localStorage.
           <Interview key={interviewKey} onInterviewEnd={fetchSidebar} /> 
         ) : activeSessionId === 'DASHBOARD' ? (
           <Dashboard />

@@ -4,9 +4,12 @@ const {
   targetQuestions,
   phaseForProgress,
   parseInterviewerResponse,
+  formatHistory,
 } = require('../agent');
 const { validateInterviewConfig, validateInterviewState } = require('../validation');
 
+// These tests pin the deterministic state helpers that keep the AI interview
+// flow predictable across browser refreshes and malformed client input.
 test('maps interview duration to a bounded question plan', () => {
   assert.equal(targetQuestions(20), 8);
   assert.equal(targetQuestions(40), 16);
@@ -27,6 +30,18 @@ test('parses structured interviewer metadata safely', () => {
     { message: 'Why?', topic: 'Caching', difficulty: 2, follow_up: true }
   );
   assert.equal(parseInterviewerResponse('plain text fallback'), null);
+});
+
+test('can keep full history for final grading while trimming live context by default', () => {
+  const history = [
+    { sender: 'user', text: `old evidence ${'x'.repeat(7000)}` },
+    { sender: 'INTERVIEWER', text: `question ${'y'.repeat(7000)}` },
+    { sender: 'user', text: `new evidence ${'z'.repeat(7000)}` },
+  ];
+
+  assert.equal(formatHistory(history).length, 2);
+  assert.equal(formatHistory(history, { maxChars: Infinity }).length, 3);
+  assert.match(formatHistory(history, { maxChars: Infinity })[0].content, /^old evidence/);
 });
 
 test('sanitizes anonymous client configuration and state', () => {

@@ -2,6 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import App from './App';
 
+// Mock page components so these tests focus on App-level navigation and storage
+// behavior instead of the full interview UI.
 vi.mock('./pages/Interview', () => ({
   default: () => <div>Interview workspace</div>,
 }));

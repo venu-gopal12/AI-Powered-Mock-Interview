@@ -4,6 +4,8 @@ const { createApp } = require('../server');
 const { normalizeScorecard } = require('../validation');
 
 function startApp(overrides = {}) {
+  // Tests inject fake AI/transcription functions so HTTP behavior is exercised
+  // without external network calls or API keys.
   const calls = [];
   const dependencies = {
     async runInterviewAgent(...args) {
@@ -35,6 +37,7 @@ function startApp(overrides = {}) {
 }
 
 async function postAudio(baseUrl, bytes, type = 'audio/webm') {
+  // Node's built-in fetch/FormData lets the upload route be tested end-to-end.
   const form = new FormData();
   form.append('audio', new Blob([bytes], { type }), 'answer.webm');
   return fetch(`${baseUrl}/transcribe`, { method: 'POST', body: form });
@@ -125,6 +128,39 @@ test('normalizes generated scores and title', async (t) => {
   assert.equal(body.scorecard.technical_score, 10);
   assert.equal(body.scorecard.communication_score, 7);
   assert.equal(body.title, 'JavaScript Interview');
+});
+
+test('uses the full cleaned transcript for final grading', async (t) => {
+  let scorecardHistory;
+  let titleHistory;
+  const oldestAnswer = `oldest evidence ${'x'.repeat(7000)}`;
+  const history = [
+    { sender: 'user', text: oldestAnswer },
+    { sender: 'INTERVIEWER', text: `Question one ${'y'.repeat(7000)}` },
+    { sender: 'HR_WHISPER', text: 'Think about structure.', _isHint: true },
+    { sender: 'user', text: `middle evidence ${'z'.repeat(7000)}` },
+    { sender: 'INTERVIEWER', text: `Question two ${'a'.repeat(7000)}` },
+    { sender: 'user', text: `latest evidence ${'b'.repeat(7000)}` },
+  ];
+  const { server, baseUrl } = startApp({
+    async generateScorecard(receivedHistory) {
+      scorecardHistory = receivedHistory;
+      return { technical_score: 8, communication_score: 8 };
+    },
+    async generateTitle(receivedHistory) {
+      titleHistory = receivedHistory;
+      return 'Full Transcript';
+    },
+  });
+  t.after(() => server.close());
+
+  const response = await post(baseUrl, '/end-interview', { history });
+
+  assert.equal(response.status, 200);
+  assert.equal(scorecardHistory.length, 5);
+  assert.equal(titleHistory.length, 5);
+  assert.equal(scorecardHistory[0].text, oldestAnswer);
+  assert.equal(scorecardHistory.some((message) => message._isHint), false);
 });
 
 test('builds a weighted evidence-based scorecard with deterministic metrics', () => {

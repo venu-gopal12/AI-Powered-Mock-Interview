@@ -4,6 +4,8 @@ const titleCase = (value) =>
   value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 function DimensionGroup({ title, values, fallback }) {
+  // New scorecards include nested dimensions; fallback keeps older saved
+  // sessions readable by expanding the aggregate score into each row.
   const dimensions = values || fallback;
   return (
     <div style={{ flex: '1 1 240px' }}>
@@ -27,6 +29,8 @@ function DimensionGroup({ title, values, fallback }) {
 }
 
 function EvidenceList({ title, items, fallback, color }) {
+  // Prefer evidence-based model output, but show legacy feedback/improvement
+  // strings when old saved scorecards do not have arrays yet.
   const displayItems = items?.length ? items : fallback ? [{ point: fallback, evidence: '' }] : [];
   if (!displayItems.length) return null;
   return (
@@ -52,6 +56,8 @@ function EvidenceList({ title, items, fallback, color }) {
 
 export default function Scorecard({ scorecard }) {
   if (!scorecard) return null;
+  // Fallbacks preserve compatibility with scorecards saved before detailed
+  // correctness/depth/communication dimensions existed.
   const technicalFallback = {
     correctness: scorecard.technical_score ?? 0,
     depth: scorecard.technical_score ?? 0,
@@ -63,6 +69,7 @@ export default function Scorecard({ scorecard }) {
     confidence: scorecard.communication_score ?? 0,
   };
   const overall = scorecard.overall_score ??
+    // Recalculate old scorecards using the same weighted blend as the server.
     Math.round((scorecard.technical_score ?? 0) * 0.6 + (scorecard.communication_score ?? 0) * 0.4);
   const summary = scorecard.interview_summary;
 

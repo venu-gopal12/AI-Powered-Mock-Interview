@@ -1,5 +1,7 @@
 const { generateResumeSummary } = require('../agent.js');
 
+// Legacy manual helper for experimenting with resume summarization prompts.
+// The current interview flow sends extracted resume text directly to the agent.
 const dummyResume = `
 Jane Doe
 Software Engineer

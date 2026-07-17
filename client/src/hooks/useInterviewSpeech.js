@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import api from '../api/api';
 
 function pickVoice(voices, preferMale) {
+  // Browser voice lists differ by OS, so choose by language/name hints instead
+  // of relying on a fixed index.
   const english = voices.filter((voice) => voice.lang.startsWith('en'));
   if (!english.length) return voices[0] || null;
   const hints = preferMale
@@ -13,15 +15,20 @@ function pickVoice(voices, preferMale) {
 }
 
 function cleanText(text) {
+  // Remove markdown and links so spoken output sounds natural.
   return text.replace(/[*`#]/g, '').replace(/\[.*?\]/g, '').replace(/https?:\/\/\S+/g, 'link');
 }
 
 function preferredAudioType() {
+  // Prefer Opus/WebM because most Chromium browsers support it and the backend
+  // validates this format.
   const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
   return types.find((type) => MediaRecorder.isTypeSupported?.(type)) || '';
 }
 
 export default function useInterviewSpeech(onTranscript) {
+  // This hook owns all voice input/output state so the Interview component only
+  // has to decide when to start recording or speak a response.
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -31,15 +38,18 @@ export default function useInterviewSpeech(onTranscript) {
   const callbackRef = useRef(onTranscript);
 
   useEffect(() => {
+    // Keep the latest transcript callback without recreating recorder handlers.
     callbackRef.current = onTranscript;
   }, [onTranscript]);
 
   const releaseMicrophone = () => {
+    // Stopping tracks releases the browser microphone indicator and hardware.
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   };
 
   useEffect(() => () => {
+    // Cleanup covers route changes, refreshes, and component unmounts.
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
     releaseMicrophone();
     window.speechSynthesis?.cancel();
@@ -52,6 +62,7 @@ export default function useInterviewSpeech(onTranscript) {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
+        // Audio constraints improve interview transcription in noisy rooms.
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -66,6 +77,7 @@ export default function useInterviewSpeech(onTranscript) {
       chunksRef.current = [];
 
       recorder.ondataavailable = (event) => {
+        // MediaRecorder emits chunks while recording; store them until stop.
         if (event.data.size) chunksRef.current.push(event.data);
       };
       recorder.onerror = () => {
@@ -74,6 +86,8 @@ export default function useInterviewSpeech(onTranscript) {
         window.alert('The microphone recording failed. Please try again.');
       };
       recorder.onstop = async () => {
+        // Stopping recording immediately releases the mic, then uploads the
+        // complete audio blob for server-side transcription.
         setIsListening(false);
         releaseMicrophone();
         const audio = new Blob(chunksRef.current, {
@@ -85,6 +99,8 @@ export default function useInterviewSpeech(onTranscript) {
         setIsTranscribing(true);
         try {
           const formData = new FormData();
+          // Preserve a matching extension because providers may inspect both
+          // MIME type and filename.
           const extension = audio.type.includes('ogg')
             ? 'ogg'
             : audio.type.includes('mp4')
@@ -112,17 +128,22 @@ export default function useInterviewSpeech(onTranscript) {
   };
 
   const toggleListening = () => {
+    // A single button toggles between starting capture and stopping for
+    // transcription.
     if (isListening) recorderRef.current?.stop();
     else if (!isTranscribing) startListening();
   };
 
   const stopSpeaking = () => {
+    // Cancel any queued utterances so the candidate can regain control quickly.
     window.speechSynthesis?.cancel();
     setIsSpeaking(false);
   };
 
   const speak = (text, preferMale = true) => {
     if (!window.speechSynthesis) return;
+    // Speech synthesis stays local to the browser; only transcription audio is
+    // sent to the backend.
     const utterance = new SpeechSynthesisUtterance(cleanText(text));
     utterance.voice = pickVoice(window.speechSynthesis.getVoices(), preferMale);
     utterance.pitch = preferMale ? 0.85 : 1.1;

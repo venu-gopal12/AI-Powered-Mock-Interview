@@ -1,5 +1,7 @@
 const MAX_MESSAGE_CHARS = 12_000;
 const MAX_RESUME_CHARS = 10_000;
+// Sender values include older multi-agent names so previously saved sessions
+// can still be reviewed after the app moved to one interviewer persona.
 const ALLOWED_SENDERS = new Set([
   'user',
   'INTERVIEWER',
@@ -15,6 +17,8 @@ const FOCUSES = new Set(['resume', 'frontend', 'backend', 'full-stack', 'behavio
 const PHASES = new Set(['introduction', 'project_deep_dive', 'technical', 'problem_solving', 'closing']);
 
 function validateInterviewConfig(value = {}) {
+  // Normalize user-configurable interview settings and fall back to the default
+  // setup when a client sends an unsupported value.
   const role =
     typeof value.role === 'string' && value.role.trim()
       ? value.role.trim().slice(0, 80)
@@ -29,6 +33,8 @@ function validateInterviewConfig(value = {}) {
 }
 
 function validateInterviewState(value = {}) {
+  // Clamp progress metadata because the browser stores it locally and may send
+  // stale or manually edited values.
   return {
     phase: PHASES.has(value.phase) ? value.phase : 'introduction',
     current_topic:
@@ -48,6 +54,8 @@ function validateInterviewState(value = {}) {
 }
 
 function validateHistory(value) {
+  // History arrives from the browser, so every message is checked before it is
+  // trusted by the server or passed to an AI model.
   if (value === undefined) return { value: [] };
   if (!Array.isArray(value)) return { error: 'History must be an array.' };
   if (value.length > 200) return { error: 'History contains too many messages.' };
@@ -73,6 +81,8 @@ function validateHistory(value) {
 }
 
 function validateInterviewBody(body = {}) {
+  // Validate the full /interview payload in one place so route handlers can
+  // stay focused on orchestration.
   if (typeof body.message !== 'string' || !body.message.trim()) {
     return { error: 'Message is required.' };
   }
@@ -96,6 +106,8 @@ function validateInterviewBody(body = {}) {
 }
 
 function scorecardMetrics(history = []) {
+  // These metrics are deterministic and are merged into scorecards regardless
+  // of what the grader model returns.
   const questionsAnswered = history.filter(
     (message) =>
       message?.sender === 'user' &&
@@ -116,6 +128,8 @@ function scorecardMetrics(history = []) {
 }
 
 function normalizeScorecard(value, history = []) {
+  // Coerce model output into the shape the UI expects. This protects older
+  // scorecards and malformed model responses from breaking rendering.
   const score = (input) => {
     const number = Number(input);
     return Number.isFinite(number)
@@ -141,6 +155,7 @@ function normalizeScorecard(value, history = []) {
   const technicalScore = average(Object.values(technical));
   const communicationScore = average(Object.values(communication));
   const evidenceItems = (items) =>
+    // Evidence lists are intentionally short so the scorecard remains scannable.
     Array.isArray(items)
       ? items.slice(0, 3).map((item) => ({
           point: text(item?.point, 'Observation'),

@@ -1,5 +1,7 @@
 import { STATUS } from 'react-joyride';
 
+// Desktop targets can point directly at the resume button and editor panel
+// because both are visible in the wide layout.
 export const DESKTOP_TOUR_STEPS = [
   {
     target: '.tour-resume-step',
@@ -24,6 +26,7 @@ export const DESKTOP_TOUR_STEPS = [
   },
 ];
 
+// Mobile uses stable controls that remain visible when panels are collapsed.
 export const MOBILE_TOUR_STEPS = [
   {
     target: '.mobile-menu-toggle',
@@ -49,5 +52,6 @@ export const MOBILE_TOUR_STEPS = [
 ];
 
 export function hasCompletedTour(status) {
+  // Closing Joyride should pause the tour, not mark it complete.
   return status === STATUS.FINISHED || status === STATUS.SKIPPED;
 }
