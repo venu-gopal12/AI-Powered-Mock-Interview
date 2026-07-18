@@ -270,11 +270,7 @@ const Interview = ({ onInterviewEnd }) => {
     }
   };
 
-  // FIX #1: New interview button — clears active session from localStorage
-  const startNewInterview = () => {
-    if (messages.length > 0) {
-      if (!window.confirm('Start a new interview? The current conversation will be cleared.')) return;
-    }
+  const resetInterviewWorkspace = () => {
     setMessages([]);
     setResumeContext('');
     setScorecard(null);
@@ -289,6 +285,22 @@ const Interview = ({ onInterviewEnd }) => {
     interviewStateRef.current = DEFAULT_INTERVIEW_STATE;
     messagesRef.current = [];
     clearActiveSession();
+  };
+
+  // FIX #1: New interview button — clears active session from localStorage
+  const startNewInterview = () => {
+    if (messages.length > 0) {
+      if (!window.confirm('Start a new interview? The current conversation will be cleared.')) return;
+    }
+    resetInterviewWorkspace();
+  };
+
+  const closeScorecardAndStartNew = () => {
+    // The completed session is already saved before the scorecard opens, so
+    // closing it should land the user on a fresh interview without another
+    // confirmation prompt.
+    resetInterviewWorkspace();
+    if (onInterviewEnd) onInterviewEnd();
   };
 
   const handlePanic = async () => {
@@ -766,7 +778,7 @@ const Interview = ({ onInterviewEnd }) => {
         <div className="modal-overlay">
           <div className="modal-content">
             <Scorecard scorecard={scorecard} />
-            <button onClick={() => setScorecard(null)} className="modal-close-btn">Close</button>
+            <button onClick={closeScorecardAndStartNew} className="modal-close-btn">Close</button>
           </div>
         </div>
       )}
